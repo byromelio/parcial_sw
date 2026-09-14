@@ -1,0 +1,42 @@
+:root {
+  /* Light (por si vuelves a claro) */
+  --bg: #ffffff;
+  --surface: #f8fafc;
+  --surface-2: #eef2f7;
+  --text: #0f172a;
+  --text-muted: #64748b;
+  --border: #e5e7eb;
+  --accent: #4f46e5;
+  --danger: #ef4444;
+  --ok: #22c55e;
+
+  /* Canvas */
+  --canvas-bg: #f8fafc;
+  --canvas-grid: #cbd5e1;
+}
+
+/* Tema oscuro */
+.theme-dark {
+  --bg: #0b1020;          /* fondo app */
+  --surface: #10172a;      /* paneles */
+  --surface-2: #0f1525;    /* barras/headers */
+  --text: #e5e7eb;         /* texto principal */
+  --text-muted: #94a3b8;   /* texto secundario */
+  --border: #1f2937;       /* bordes */
+  --accent: #7c8cff;       /* primario */
+  --danger: #ef6666;
+  --ok: #23d18b;
+
+  /* Canvas */
+  --canvas-bg: #0b1020;
+  --canvas-grid: #334155;
+}
+
+/* Aplicación base */
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  margin: 0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji","Segoe UI Emoji";
+}

@@ -1,0 +1,25 @@
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+frontend/dist/
+
+# Generated exporter output
+exporters/output/
+exporters/json/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

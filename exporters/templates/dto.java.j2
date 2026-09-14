@@ -1,0 +1,21 @@
+package com.test.dtos;
+
+import java.util.*;
+import java.time.*;   // 👈 Import para LocalDate y LocalDateTime
+
+public class {{ class_name }}Dto {
+
+{% for attr in attributes %}
+    private {{ attr.type }} {{ attr.name }};
+{% endfor %}
+
+{% for attr in attributes %}
+    public {{ attr.type }} get{{ attr.name|capitalize }}() {
+        return {{ attr.name }};
+    }
+
+    public void set{{ attr.name|capitalize }}({{ attr.type }} {{ attr.name }}) {
+        this.{{ attr.name }} = {{ attr.name }};
+    }
+{% endfor %}
+}
