@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     REFRESH_EXPIRE_DAYS: int = 14
     CORS_ORIGINS: str = ""
     DEBUG: bool = False
+    ANTHROPIC_API_KEY: str = ""
 
     class Config:
         env_file = ".env"

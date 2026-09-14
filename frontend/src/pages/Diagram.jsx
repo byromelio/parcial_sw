@@ -25,6 +25,7 @@ import ClassCard from "../components/canvas/ClassCard";
 import ConnectionLayer from "../components/canvas/ConnectionLayer";
 import Inspector from "../components/panels/Inspector";
 import RelationInspector from "../components/panels/RelationInspector";
+import AiAssistantPanel from "../components/panels/AiAssistantPanel";
 
 // ===== layout =====
 import HeaderBar from "../components/layout/HeaderBar";
@@ -261,6 +262,8 @@ const { exportDiagram, loading: exporting } = useExportDiagram();
             camera={camera}
             onSelectRelation={(id) => { setSelectedRelId(id); setSelectedId(null); }}
           />
+
+          <AiAssistantPanel diagramId={diagram.id} />
         </main>
 
         {/* Panel lateral derecho: inspector de clase o relación */}
