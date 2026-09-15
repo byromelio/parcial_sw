@@ -23,3 +23,6 @@ exporters/json/
 Thumbs.db
 .vscode/
 .idea/
+
+# Logs de servidores de desarrollo local
+*.log
