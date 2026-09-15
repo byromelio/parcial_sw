@@ -1,4 +1,4 @@
-from sqlalchemy import String, Boolean, ForeignKey, Enum, DateTime, func
+from sqlalchemy import String, Boolean, ForeignKey, Enum, DateTime, func, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from ..db import Base
@@ -107,12 +107,15 @@ class Relacion(Base):
 # =========================
 class Atributo(Base):
     __tablename__ = "atributo"
+    __table_args__ = (
+        UniqueConstraint("clase_id", "nombre", name="uq_atributo_clase_nombre"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)
     tipo: Mapped[str] = mapped_column(String(60), default="string")
     requerido: Mapped[bool] = mapped_column(Boolean, default=False)
-    
+
     clase_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("clase.id", ondelete="CASCADE"), nullable=False)
     clase: Mapped["Clase"] = relationship(back_populates="atributos")
 
@@ -122,6 +125,9 @@ class Atributo(Base):
 # =========================
 class Metodo(Base):
     __tablename__ = "metodo"
+    __table_args__ = (
+        UniqueConstraint("clase_id", "nombre", name="uq_metodo_clase_nombre"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nombre: Mapped[str] = mapped_column(String(120), nullable=False)

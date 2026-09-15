@@ -18,6 +18,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/diagrams", tags=["methods"])
 
 
+def _ensure_unique_method_name(db: Session, clase_id: UUID, name: str, exclude_id: UUID | None = None):
+    """Valida que no exista otro metodo con el mismo nombre en la clase."""
+    q = db.query(Metodo).filter(
+        Metodo.clase_id == clase_id,
+        Metodo.nombre == name,
+    )
+    if exclude_id:
+        q = q.filter(Metodo.id != exclude_id)
+    if q.first():
+        raise HTTPException(
+            status_code=400,
+            detail=f"La clase ya tiene un metodo llamado '{name}'"
+        )
+
+
 # 🔹 Listar métodos
 @router.get("/classes/{class_id}/methods", response_model=list[MetodoOut])
 def list_methods(
@@ -42,6 +57,7 @@ async def create_method(
 ):
     logger.info(f"➕ [CREATE] método -> class_id={class_id}, user={me.id}, body={body}")
     c = get_my_class(db, me, class_id)
+    _ensure_unique_method_name(db, c.id, body.name)
 
     try:
         m = Metodo(nombre=body.name, tipo_retorno=body.return_type, clase_id=c.id)
@@ -78,7 +94,9 @@ async def update_method(
         raise HTTPException(404, "Método no encontrado")
 
     try:
-        if body.name is not None: m.nombre = body.name
+        if body.name is not None and body.name != m.nombre:
+            _ensure_unique_method_name(db, m.clase_id, body.name, exclude_id=m.id)
+            m.nombre = body.name
         if body.return_type is not None: m.tipo_retorno = body.return_type
 
         db.commit(); db.refresh(m)

@@ -192,6 +192,14 @@ class DiagramToolExecutor:
     # ---------------------------------------------------------------
     def add_attribute(self, class_name: str, name: str, type: str, required: bool = False) -> dict:
         c = self._find_class(class_name)
+        existing = (
+            self.db.query(Atributo)
+            .filter(Atributo.clase_id == c.id)
+            .filter(Atributo.nombre.ilike(name.strip()))
+            .one_or_none()
+        )
+        if existing:
+            raise ToolError(f"La clase '{c.nombre}' ya tiene un atributo llamado '{name}'.")
         a = Atributo(nombre=name.strip(), tipo=type.strip(), requerido=bool(required), clase_id=c.id)
         self.db.add(a)
         self.db.commit()
@@ -215,6 +223,14 @@ class DiagramToolExecutor:
     # ---------------------------------------------------------------
     def add_method(self, class_name: str, name: str, return_type: str = "void") -> dict:
         c = self._find_class(class_name)
+        existing = (
+            self.db.query(Metodo)
+            .filter(Metodo.clase_id == c.id)
+            .filter(Metodo.nombre.ilike(name.strip()))
+            .one_or_none()
+        )
+        if existing:
+            raise ToolError(f"La clase '{c.nombre}' ya tiene un metodo llamado '{name}'.")
         m = Metodo(nombre=name.strip(), tipo_retorno=return_type.strip(), clase_id=c.id)
         self.db.add(m)
         self.db.commit()

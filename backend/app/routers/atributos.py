@@ -18,6 +18,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/diagrams", tags=["attributes"])
 
 
+def _ensure_unique_attribute_name(db: Session, clase_id: UUID, name: str, exclude_id: UUID | None = None):
+    """Valida que no exista otro atributo con el mismo nombre en la clase."""
+    q = db.query(Atributo).filter(
+        Atributo.clase_id == clase_id,
+        Atributo.nombre == name,
+    )
+    if exclude_id:
+        q = q.filter(Atributo.id != exclude_id)
+    if q.first():
+        raise HTTPException(
+            status_code=400,
+            detail=f"La clase ya tiene un atributo llamado '{name}'"
+        )
+
+
 # 🔹 Listar atributos
 @router.get("/classes/{class_id}/attributes", response_model=list[AtributoOut])
 def list_attributes(
@@ -42,6 +57,7 @@ async def create_attribute(
 ):
     logger.info(f"➕ [CREATE] atributo -> class_id={class_id}, user={me.id}, body={body}")
     c = get_my_class(db, me, class_id)
+    _ensure_unique_attribute_name(db, c.id, body.name)
 
     try:
         a = Atributo(nombre=body.name, tipo=body.type, requerido=bool(body.required), clase_id=c.id)
@@ -78,7 +94,9 @@ async def update_attribute(
         raise HTTPException(404, "Atributo no encontrado")
 
     try:
-        if body.name is not None: a.nombre = body.name
+        if body.name is not None and body.name != a.nombre:
+            _ensure_unique_attribute_name(db, a.clase_id, body.name, exclude_id=a.id)
+            a.nombre = body.name
         if body.type is not None: a.tipo = body.type
         if body.required is not None: a.requerido = body.required
 
