@@ -10,7 +10,11 @@ from app.routers import export
 from app.routers import ai
 from app.ws_manager import ws_manager
 app = FastAPI(title="UML AI Tool API")
-print("🚀 ALLOWED_ORIGINS:", ALLOWED_ORIGINS)
+# Sin emoji a propósito: con --reload, el proceso worker que crea uvicorn en
+# Windows no siempre hereda una consola UTF-8, y un emoji en un print de
+# arranque tira UnicodeEncodeError con la codificación cp1252 por defecto,
+# lo que directamente impide que el backend levante.
+print("ALLOWED_ORIGINS:", ALLOWED_ORIGINS)
 
 
 @app.on_event("startup")

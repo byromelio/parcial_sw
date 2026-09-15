@@ -71,7 +71,7 @@ async def notify_class_created(diagram_id: UUID, clase: Clase):
             "z_index": clase.z_index,
         },
     }
-    print("🔔 Evento emitido (Clase Creada):", payload)
+    print("Evento emitido (Clase Creada):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -88,7 +88,7 @@ async def notify_class_updated(diagram_id: UUID, clase: Clase):
             "z_index": clase.z_index,
         },
     }
-    print("🔔 Evento emitido (Clase Actualizada):", payload)
+    print("Evento emitido (Clase Actualizada):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -97,7 +97,7 @@ async def notify_class_deleted(diagram_id: UUID, class_id: UUID):
         "event": "class.deleted",
         "data": {"id": str(class_id)},
     }
-    print("🔔 Evento emitido (Clase Eliminada):", payload)
+    print("Evento emitido (Clase Eliminada):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -115,7 +115,7 @@ async def notify_attribute_created(diagram_id: UUID, atributo: Atributo):
             "clase_id": str(atributo.clase_id),
         },
     }
-    print("🔔 Evento emitido (Atributo Creado):", payload)
+    print("Evento emitido (Atributo Creado):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -130,7 +130,7 @@ async def notify_attribute_updated(diagram_id: UUID, atributo: Atributo):
             "clase_id": str(atributo.clase_id),
         },
     }
-    print("🔔 Evento emitido (Atributo Actualizado):", payload)
+    print("Evento emitido (Atributo Actualizado):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -141,7 +141,7 @@ async def notify_attribute_deleted(diagram_id: UUID, atributo_id: UUID, clase_id
             "id": str(atributo_id),
             "clase_id": str(clase_id),},
     }
-    print("🔔 Evento emitido (Atributo Eliminado):", payload)
+    print("Evento emitido (Atributo Eliminado):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -158,7 +158,7 @@ async def notify_method_created(diagram_id: UUID, metodo: Metodo):
             "clase_id": str(metodo.clase_id),
         },
     }
-    print("🔔 Evento emitido (Método Creado):", payload)
+    print("Evento emitido (Metodo Creado):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -172,7 +172,7 @@ async def notify_method_updated(diagram_id: UUID, metodo: Metodo):
             "clase_id": str(metodo.clase_id),
         },
     }
-    print("🔔 Evento emitido (Método Actualizado):", payload)
+    print("Evento emitido (Metodo Actualizado):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -183,7 +183,7 @@ async def notify_method_deleted(diagram_id: UUID, metodo_id: UUID, clase_id: UUI
             "id": str(metodo_id),
             "clase_id": str(clase_id), },
     }
-    print("🔔 Evento emitido (Método Eliminado):", payload)
+    print("Evento emitido (Metodo Eliminado):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 # =========================
@@ -213,7 +213,7 @@ async def notify_relation_created(diagram_id: UUID, relation: RelacionOut):
             "destino_nombre": relation.destino_nombre,
         },
     }
-    print("🔔 Evento emitido (Relación Creada):", payload)
+    print("Evento emitido (Relacion Creada):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -239,7 +239,7 @@ async def notify_relation_updated(diagram_id: UUID, relation: RelacionOut):
             "destino_nombre": relation.destino_nombre,
         },
     }
-    print("🔔 Evento emitido (Relación Actualizada):", payload)
+    print("Evento emitido (Relacion Actualizada):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)
 
 
@@ -252,5 +252,5 @@ async def notify_relation_deleted(diagram_id: UUID, relation_id: UUID):
             "diagram_id": str(diagram_id),
             },
     }
-    print("🔔 Evento emitido (Relación Eliminada):", payload)
+    print("Evento emitido (Relacion Eliminada):", payload)
     await ws_manager.broadcast(str(diagram_id), payload)

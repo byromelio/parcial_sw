@@ -7,22 +7,7 @@ Convierte un diagrama UML (JSON) a entidades Java con JPA.
 
 import os, json
 from exporters.generators.json_to_relations import build_relations, to_camel
-
-# ========================
-# Función de mapeo de tipos
-# ========================
-def map_type(attr_type: str) -> str:
-    mapping = {
-        "int": "Integer",
-        "long": "Long",
-        "string": "String",
-        "float": "Float",
-        "double": "Double",
-        "boolean": "Boolean",
-        "date": "LocalDate",
-        "datetime": "LocalDateTime"
-    }
-    return mapping.get(attr_type.lower(), "String")
+from exporters.generators.type_mapping import map_type
 
 
 # ========================

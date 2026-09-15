@@ -1,5 +1,6 @@
 import os, json
 from jinja2 import Environment, FileSystemLoader
+from exporters.generators.type_mapping import map_type
 
 def generate_dtos(json_path, output_dir, templates_dir="../templates"):
     os.makedirs(output_dir, exist_ok=True)
@@ -16,23 +17,11 @@ def generate_dtos(json_path, output_dir, templates_dir="../templates"):
         class_name = c["name"]
         attributes = c.get("attributes", [])
 
-        # Mapear tipos UML a Java
-        mapping = {
-            "int": "Integer",
-            "long": "Long",
-            "string": "String",
-            "float": "Float",
-            "double": "Double",
-            "boolean": "Boolean",
-            "date": "LocalDate",
-            "datetime": "LocalDateTime"
-        }
-
         for attr in attributes:
             if attr["name"].lower() == "id":
                 attr["type"] = "Long"  # 👈 Siempre Long para id
             else:
-                attr["type"] = mapping.get(attr["type"].lower(), "String")
+                attr["type"] = map_type(attr["type"])
 
         file_name = f"{class_name}Dto.java"
         file_path = os.path.join(output_dir, file_name)
