@@ -1,4 +1,5 @@
 // src/components/layout/HeaderBar.jsx
+import { useRef } from "react";
 import Icon from "../common/Icon";
 
 function timeAgo(iso) {
@@ -21,10 +22,16 @@ export default function HeaderBar({
   onLogout,
   onExport,
   exporting,
+  onExportXmi,
+  exportingXmi,
+  onImportXmiFile,
+  importingXmi,
   onOpenHelp,
   onUndo,
   canUndo,
 }) {
+  const xmiInputRef = useRef(null);
+
   return (
     <header
       style={{
@@ -88,6 +95,37 @@ export default function HeaderBar({
           <Icon name={exporting ? "loader" : "download"} className={exporting ? "spinning" : ""} />
           {exporting ? "Generando…" : "Exportar backend"}
         </button>
+
+        <div style={{ width: 1, height: 22, background: "var(--border)", alignSelf: "center" }} />
+
+        <button
+          className="btn btn-icon"
+          onClick={onExportXmi}
+          disabled={exportingXmi}
+          title="Exportar el diagrama como .xmi (interoperable con Enterprise Architect)"
+        >
+          <Icon name={exportingXmi ? "loader" : "file"} className={exportingXmi ? "spinning" : ""} />
+        </button>
+
+        <button
+          className="btn btn-icon"
+          onClick={() => xmiInputRef.current?.click()}
+          disabled={importingXmi}
+          title="Importar un diagrama desde un archivo .xmi"
+        >
+          <Icon name={importingXmi ? "loader" : "upload"} className={importingXmi ? "spinning" : ""} />
+        </button>
+        <input
+          ref={xmiInputRef}
+          type="file"
+          accept=".xmi,.xml,application/xml,text/xml"
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            onImportXmiFile?.(file);
+            e.target.value = ""; // permite reimportar el mismo archivo dos veces seguidas
+          }}
+        />
       </div>
 
       <div

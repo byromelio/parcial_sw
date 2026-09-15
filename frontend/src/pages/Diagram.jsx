@@ -26,6 +26,7 @@ import RelationInspector from "../components/panels/RelationInspector";
 import AiAssistantPanel from "../components/panels/AiAssistantPanel";
 import HelpGuide from "../components/common/HelpGuide";
 import Icon from "../components/common/Icon";
+import { exportXmi, importXmi } from "../api/xmi";
 
 // ===== layout =====
 import HeaderBar from "../components/layout/HeaderBar";
@@ -53,6 +54,43 @@ export default function DiagramDashboard() {
   const clearUndo = useUndo((s) => s.clear);
 
   const { exportDiagram, loading: exporting } = useExportDiagram();
+  const [exportingXmi, setExportingXmi] = useState(false);
+  const [importingXmi, setImportingXmi] = useState(false);
+
+  const handleExportXmi = async () => {
+    setExportingXmi(true);
+    try {
+      await exportXmi(diagram.id, diagram.title);
+    } catch (err) {
+      setAviso({ tipo: "error", texto: err?.response?.data?.detail || "No se pudo exportar el XMI" });
+    } finally {
+      setExportingXmi(false);
+    }
+  };
+
+  const handleImportXmiFile = async (file) => {
+    if (!file) return;
+    setImportingXmi(true);
+    try {
+      const s = await importXmi(diagram.id, file);
+      const partes = [
+        s.classes_created.length ? `${s.classes_created.length} clase(s)` : null,
+        s.attributes_created ? `${s.attributes_created} atributo(s)` : null,
+        s.relations_created ? `${s.relations_created} relación(es)` : null,
+      ].filter(Boolean);
+      const omitidas = s.classes_skipped.length ? ` (${s.classes_skipped.length} clase(s) ya existían)` : "";
+      setAviso({
+        tipo: "ok",
+        texto: partes.length
+          ? `Importado desde XMI: ${partes.join(", ")}${omitidas}.`
+          : `No se importó nada nuevo${omitidas}.`,
+      });
+    } catch (err) {
+      setAviso({ tipo: "error", texto: err?.response?.data?.detail || "No se pudo importar el archivo XMI" });
+    } finally {
+      setImportingXmi(false);
+    }
+  };
 
   const {
     relations,
@@ -245,6 +283,10 @@ export default function DiagramDashboard() {
         onLogout={() => { logout(); nav("/login", { replace: true }); }}
         onExport={() => exportDiagram(diagram.id)}
         exporting={exporting}
+        onExportXmi={handleExportXmi}
+        exportingXmi={exportingXmi}
+        onImportXmiFile={handleImportXmiFile}
+        importingXmi={importingXmi}
         onOpenHelp={() => setShowHelp(true)}
         onUndo={deshacer}
         canUndo={undoCount > 0}
@@ -396,9 +438,14 @@ export default function DiagramDashboard() {
               }}
             >
               <Icon
-                name={aviso.tipo === "ok" ? "check" : "info"}
+                name={aviso.tipo === "ok" ? "check" : aviso.tipo === "error" ? "warning" : "info"}
                 size={14}
-                style={{ color: aviso.tipo === "ok" ? "var(--success)" : "var(--text-subtle)" }}
+                style={{
+                  color:
+                    aviso.tipo === "ok" ? "var(--success)"
+                    : aviso.tipo === "error" ? "var(--danger)"
+                    : "var(--text-subtle)",
+                }}
               />
               {aviso.texto}
             </div>

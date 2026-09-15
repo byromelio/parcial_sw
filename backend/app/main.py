@@ -8,6 +8,7 @@ from app.routers import diagramas, classes, atributos, metodo, relacion, realtim
 from app.routers import classes as classes_router
 from app.routers import export
 from app.routers import ai
+from app.routers import xmi
 from app.ws_manager import ws_manager
 app = FastAPI(title="UML AI Tool API")
 # Sin emoji a propósito: con --reload, el proceso worker que crea uvicorn en
@@ -48,5 +49,6 @@ app.include_router(metodo.router)
 app.include_router(relacion.router)
 app.include_router(export.router)
 app.include_router(ai.router)
+app.include_router(xmi.router)
 # Router WebSocket (colaboración en tiempo real)
 app.include_router(realtime.router)
