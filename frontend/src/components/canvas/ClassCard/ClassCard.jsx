@@ -105,11 +105,11 @@ export default function ClassCard({
         style={{
           position: "absolute",
           inset: 0,
-          background: selected ? "#122038" : "#0e1526",
-          border: selected ? "2px solid #6ab0ff" : "1px solid #334",
-          borderRadius: 8,
-          color: "#eaeefb",
-          boxShadow: selected ? "0 8px 24px rgba(0,80,255,.25)" : "0 6px 20px rgba(0,0,0,.25)",
+          background: "var(--surface-1)",
+          border: selected ? "2px solid var(--accent)" : "1px solid var(--border-strong)",
+          borderRadius: "var(--radius)",
+          color: "var(--text)",
+          boxShadow: selected ? "0 0 0 3px var(--accent-soft), var(--shadow)" : "var(--shadow-sm)",
           overflow: "hidden",
           transition: "box-shadow .15s, border-color .15s, background .15s",
         }}

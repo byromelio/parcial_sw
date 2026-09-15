@@ -18,7 +18,7 @@ import {
   deleteMethod,      // ✅ IMPORTAR
 } from "../api/classes";
 import useDebouncedCallback from "./useDebouncedCallback";
-import { connect, disconnect, onEvent } from "../api/realtime";
+import { connect, disconnect, onEvent as subscribe } from "../api/realtime";
 
 export default function useClassesAndDetails(diagram) {
   // 🔹 Lista de clases
@@ -77,9 +77,20 @@ export default function useClassesAndDetails(diagram) {
       loadClasses();
       connect(diagram.id);
 
+      // Los listeners persisten hasta que uno se da de baja, asi que hay que
+      // guardar cada baja y ejecutarlas en el cleanup: si no, cada vez que
+      // se re-ejecuta este efecto se acumulan duplicados y un mismo evento
+      // entrante se aplicaria varias veces al estado.
+      const offs = [];
+      const onEvent = (event, cb) => offs.push(subscribe(event, cb));
+
       onEvent("class.created", (c) => {
-        setClasses((prev) => [...prev, c]);
-        setDetailsByClass((prev) => ({ ...prev, [c.id]: { attrs: [], meths: [] } }));
+        // El que creó la clase también recibe su propio broadcast, así que
+        // hay que ignorarla si ya está en la lista.
+        setClasses((prev) => (prev.some((x) => x.id === c.id) ? prev : [...prev, c]));
+        setDetailsByClass((prev) =>
+          prev[c.id] ? prev : { ...prev, [c.id]: { attrs: [], meths: [] } }
+        );
       });
 
       // onEvent("class.updated", (c) => {
@@ -172,9 +183,9 @@ export default function useClassesAndDetails(diagram) {
       // ✅ CREAR
       onEvent("attribute.created", (a) => {
         const attr = normalizeAttr(a);
-        console.log("📩 WS atributo creado:", attr);
         setDetailsByClass((prev) => {
           const current = prev[attr.clase_id]?.attrs || [];
+          if (current.some((x) => x.id === attr.id)) return prev; // ya lo teníamos
           return {
             ...prev,
             [attr.clase_id]: {
@@ -298,9 +309,9 @@ export default function useClassesAndDetails(diagram) {
       // ✅ CREAR
       onEvent("method.created", (m) => {
         const meth = normalizeMeth(m);
-        console.log("📩 WS método creado:", meth);
         setDetailsByClass((prev) => {
           const current = prev[meth.clase_id]?.meths || [];
+          if (current.some((x) => x.id === meth.id)) return prev; // ya lo teníamos
           return {
             ...prev,
             [meth.clase_id]: {
@@ -347,7 +358,10 @@ export default function useClassesAndDetails(diagram) {
 
 
 
-      return () => disconnect();
+      return () => {
+        offs.forEach((off) => off());
+        disconnect();
+      };
     }
   }, [diagram]);
 

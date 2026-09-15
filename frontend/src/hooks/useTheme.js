@@ -21,10 +21,9 @@ export default function useTheme() {
 
   // 🔹 Efecto: se ejecuta cada vez que cambia `theme`
   useEffect(() => {
-    const root = document.documentElement; // obtiene la etiqueta <html>
-    if (theme === "dark") root.classList.add("theme-dark"); 
-    else root.classList.remove("theme-dark"); 
-    // 🔸 Guarda la preferencia en localStorage para persistencia
+    // El sistema de diseño define el tema oscuro en :root y el claro bajo
+    // [data-theme="light"], asi que alcanza con setear el atributo.
+    document.documentElement.dataset.theme = theme;
     localStorage.setItem("theme", theme);
   }, [theme]);
 

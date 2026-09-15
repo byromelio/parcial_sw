@@ -1,287 +1,288 @@
+// src/components/panels/RelationInspector.jsx
+//
+// Panel derecho cuando hay una relación seleccionada. Se mantuvo la lógica
+// de guardado (fullUpdate manda siempre el objeto completo porque el PATCH
+// del backend interpreta los campos ausentes); lo que se rehízo es la
+// presentación: antes los cuatro campos de multiplicidad eran cajas sueltas
+// sin ninguna etiqueta y no se entendía cuál era cuál.
 
-//src/components/panels/RelationInspector.jsx
 import { useState, useEffect } from "react";
+import Icon from "../common/Icon";
 
-// 🔹 Hook personalizado para crear callbacks con "debounce"
-//    (espera unos ms antes de ejecutar para no disparar updates en cada tecla)
 function useDebouncedCallback(callback, delay) {
   const [timeoutId, setTimeoutId] = useState(null);
-
-  function debounced(...args) {
-    if (timeoutId) clearTimeout(timeoutId);          // limpia timer previo
-    const id = setTimeout(() => callback(...args), delay); // ejecuta después del delay
+  return function debounced(...args) {
+    if (timeoutId) clearTimeout(timeoutId);
+    const id = setTimeout(() => callback(...args), delay);
     setTimeoutId(id);
-  }
-
-  return debounced;
+  };
 }
 
+const TIPOS = [
+  { v: "ASSOCIATION", label: "Asociación", ayuda: "Se relacionan, pero cada una existe por su cuenta." },
+  { v: "AGGREGATION", label: "Agregación", ayuda: "Una agrupa a la otra, que igual sobrevive sin ella." },
+  { v: "COMPOSITION", label: "Composición", ayuda: "Una contiene a la otra; sin la primera, la otra no existe." },
+  { v: "INHERITANCE", label: "Herencia", ayuda: "El destino es un tipo especializado del origen." },
+  { v: "DEPENDENCY", label: "Dependencia", ayuda: "El origen usa al destino de forma puntual." },
+];
+
+const ANCHORS = [
+  { v: "left", label: "Izquierda" },
+  { v: "right", label: "Derecha" },
+  { v: "top", label: "Arriba" },
+  { v: "bottom", label: "Abajo" },
+];
+
 export default function RelationInspector({ relation, onUpdate, onDelete }) {
-  // 🔹 Si no hay relación seleccionada, mostramos solo un panel vacío
-  if (!relation) {
-    return (
-      <aside style={{ borderLeft: "1px solid #213", padding: 16, color: "#cbd4f5" }}>
-        <div style={{ opacity: 0.7 }}>Selecciona una relación para editar</div>
-      </aside>
-    );
-  }
-
-  // 🔹 Estilos en línea para el panel, etiquetas y inputs
-  const wrap = { borderLeft: "1px solid #213", padding: 16, color: "#cbd4f5", overflow: "auto" };
-  const label = { fontSize: 12, opacity: 0.8, marginBottom: 4, marginTop: 12 };
-  const input = {
-    width: "100%",
-    padding: "8px",
-    borderRadius: 8,
-    border: "1px solid #334",
-    background: "#0e1526",
-    color: "#fff"
-  };
-
-  // 🔹 Estado local solo para la etiqueta
-  //    Esto permite escribir fluido aunque el padre no se actualice aún
-  // Estado local de la etiqueta
-  const [localLabel, setLocalLabel] = useState(relation.etiqueta ?? "");
-  //EMPESANDO EDICION
-  //const [localLabel, setLocalLabel] = useState(relation.label ?? "");
-  // Estados locales de la multiplicidad
-  // const [localMultOrigenMin, setLocalMultOrigenMin] = useState(relation.mult_origen_min ?? "");
-  // const [localMultOrigenMax, setLocalMultOrigenMax] = useState(relation.mult_origen_max ?? "");
-  // const [localMultDestinoMin, setLocalMultDestinoMin] = useState(relation.mult_destino_min ?? "");
-  // const [localMultDestinoMax, setLocalMultDestinoMax] = useState(relation.mult_destino_max ?? "");
-  const [localMultOrigenMin, setLocalMultOrigenMin] = useState(relation.src_mult_min ?? "");
+  const [localLabel, setLocalLabel] = useState(relation?.label ?? "");
+  const [localMultOrigenMin, setLocalMultOrigenMin] = useState(relation?.src_mult_min ?? "");
   const [localMultOrigenMax, setLocalMultOrigenMax] = useState(
-    relation.src_mult_max === null ? "" : relation.src_mult_max
+    relation?.src_mult_max === null ? "*" : relation?.src_mult_max ?? ""
   );
-  const [localMultDestinoMin, setLocalMultDestinoMin] = useState(relation.dst_mult_min ?? "");
-  const [localMultDestinoMax, setLocalMultDestinoMax] = useState(relation.dst_mult_max ?? "");
-  // 🔹 Cada vez que cambie la relación seleccionada (id) o alguno de sus valores,
-  //    reseteamos los estados locales
-  useEffect(() => {
-    // setLocalLabel(relation.etiqueta ?? "");
-    setLocalLabel(relation.label ?? "");
-    // setLocalMultOrigenMin(relation.src_mult_min ?? "");
-    //   setLocalMultOrigenMax(relation.src_mult_max ?? "");
-    //   setLocalMultDestinoMin(relation.dst_mult_min ?? "");
-    //  setLocalMultDestinoMax(relation.dst_mult_max ?? "");
+  const [localMultDestinoMin, setLocalMultDestinoMin] = useState(relation?.dst_mult_min ?? "");
+  const [localMultDestinoMax, setLocalMultDestinoMax] = useState(
+    relation?.dst_mult_max === null ? "*" : relation?.dst_mult_max ?? ""
+  );
 
-    // setLocalMultOrigenMin(relation.mult_origen_min ?? "");
-    // setLocalMultOrigenMax(relation.mult_origen_max ?? "");
-    // setLocalMultDestinoMin(relation.mult_destino_min ?? "");
-    // setLocalMultDestinoMax(relation.mult_destino_max ?? "");
+  useEffect(() => {
+    if (!relation) return;
+    setLocalLabel(relation.label ?? "");
     setLocalMultOrigenMin(relation.src_mult_min ?? "");
-    setLocalMultOrigenMax(
-      relation.src_mult_max === null ? "*" : relation.src_mult_max
-    );
+    setLocalMultOrigenMax(relation.src_mult_max === null ? "*" : relation.src_mult_max);
     setLocalMultDestinoMin(relation.dst_mult_min ?? "");
-    setLocalMultDestinoMax(
-      relation.dst_mult_max === null ? "*" : relation.dst_mult_max
-    );
+    setLocalMultDestinoMax(relation.dst_mult_max === null ? "*" : relation.dst_mult_max);
   }, [
-    // relation?.id,
-    // relation?.etiqueta,
-    // relation?.mult_origen_min,
-    // relation?.mult_origen_max,
-    // relation?.mult_destino_min,
-    // relation?.mult_destino_max,
     relation?.id,
-    relation?.label,          // 👈 ahora sí
+    relation?.label,
     relation?.src_mult_min,
     relation?.src_mult_max,
     relation?.dst_mult_min,
     relation?.dst_mult_max,
   ]);
 
+  const asideStyle = {
+    width: "var(--inspector-w)",
+    borderLeft: "1px solid var(--border)",
+    background: "var(--surface-1)",
+    display: "flex",
+    flexDirection: "column",
+  };
+
+  if (!relation) {
+    return (
+      <aside style={asideStyle}>
+        <div className="text-muted" style={{ margin: "auto", fontSize: 13 }}>
+          Seleccioná una relación para editarla.
+        </div>
+      </aside>
+    );
+  }
 
   const fullUpdate = (patch) => {
     const body = {
-      // lo que el backend espera en el PATCH
-      // type: patch.type ?? relation.tipo,   // usamos relation.tipo para leer
-      // label: patch.label ?? localLabel ?? relation.etiqueta ?? "",
       type: patch.type ?? relation.type,
       label: patch.label ?? localLabel ?? relation.label ?? "",
-
       src_anchor: patch.src_anchor ?? relation.src_anchor ?? "right",
       dst_anchor: patch.dst_anchor ?? relation.dst_anchor ?? "left",
       src_offset: patch.src_offset ?? relation.src_offset ?? 0,
       dst_offset: patch.dst_offset ?? relation.dst_offset ?? 0,
       src_lane: patch.src_lane ?? relation.src_lane ?? 0,
       dst_lane: patch.dst_lane ?? relation.dst_lane ?? 0,
-
-      // ⚠️ aquí convertimos de los nombres que usa el backend al enviar
-      // src_mult_min:
-      //   patch.src_mult_min ??
-      //   (localMultOrigenMin === "" ? null : Number(localMultOrigenMin)),
-      // src_mult_max:
-      //   patch.src_mult_max ??
-      //   (localMultOrigenMax === "" || localMultOrigenMax === "*"
-      //     ? null
-      //     : Number(localMultOrigenMax)),
-      // dst_mult_min:
-      //   patch.dst_mult_min ??
-      //   (localMultDestinoMin === "" ? null : Number(localMultDestinoMin)),
-      // dst_mult_max:
-      //   patch.dst_mult_max ??
-      //   (localMultDestinoMax === "" || localMultDestinoMax === "*"
-      //     ? null
-      //     : Number(localMultDestinoMax)),
       src_mult_min: patch.src_mult_min ?? (localMultOrigenMin === "" ? null : Number(localMultOrigenMin)),
-      src_mult_max: patch.src_mult_max ?? (localMultOrigenMax === "*" || localMultOrigenMax === "*" ? null : Number(localMultOrigenMax)),
+      src_mult_max: patch.src_mult_max ?? (localMultOrigenMax === "*" ? null : Number(localMultOrigenMax)),
       dst_mult_min: patch.dst_mult_min ?? (localMultDestinoMin === "" ? null : Number(localMultDestinoMin)),
-      dst_mult_max: patch.dst_mult_max ?? (localMultDestinoMax === "*" || localMultDestinoMax === "*" ? null : Number(localMultDestinoMax)),
+      dst_mult_max: patch.dst_mult_max ?? (localMultDestinoMax === "*" ? null : Number(localMultDestinoMax)),
     };
-
-    console.log("PATCH BODY =>", body); // 👀 para ver qué se manda
     onUpdate(body);
   };
 
-  // 🔹 Versión con debounce para actualizar etiqueta
-  const debouncedUpdate = useDebouncedCallback(
-    (val) => fullUpdate({ label: val }), // 🚨 igual aquí debería ser "etiqueta"
-    400 // espera 400ms desde la última tecla
-  );
+  const debouncedUpdate = useDebouncedCallback((val) => fullUpdate({ label: val }), 400);
+
+  const tipoActual = TIPOS.find((t) => t.v === relation.type);
+  const esHerenciaODependencia = ["INHERITANCE", "DEPENDENCY"].includes(relation.type);
 
   return (
-    <aside style={wrap}>
-      {/* Header con título y botón eliminar */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <h3 style={{ margin: 0 }}>Relación</h3>
-        <button
-          onClick={onDelete}
-          title="Eliminar relación"
-          style={{
-            marginLeft: "auto",
-            padding: "6px 10px",
-            borderRadius: 8,
-            border: "1px solid #334",
-            background: "transparent",
-            color: "inherit",
-          }}
-        >
-          🗑️ Relación
+    <aside style={asideStyle}>
+      {/* ---------- Encabezado ---------- */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--sp-2)",
+          padding: "var(--sp-4)",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <Icon name="relation" size={15} style={{ color: "var(--accent)" }} />
+        <strong style={{ fontSize: 13, flex: 1 }}>Relación</strong>
+        <button className="btn btn-danger-ghost btn-sm" onClick={onDelete} title="Eliminar esta relación">
+          <Icon name="trash" size={14} />
+          Eliminar
         </button>
       </div>
 
-      {/* ID de la relación */}
-      <div style={{ fontSize: 12, opacity: 0.8, marginBottom: 6 }}>
-        Relación ID: {relation.id}
-      </div>
-
-      {/* Selector de tipo de relación */}
-      <div style={label}>Tipo</div>
-      <select
-        style={input}
-        // value={relation.tipo}
-        value={relation.type}
-        onChange={(e) => fullUpdate({ type: e.target.value })} // 🚨 debería ser { tipo: ... }
-      >
-        <option value="ASSOCIATION">Asociación</option>
-        <option value="AGGREGATION">Agregación</option>
-        <option value="COMPOSITION">Composición</option>
-        <option value="INHERITANCE">Herencia</option>
-        <option value="DEPENDENCY">Dependencia</option>
-      </select>
-
-      {/* Anchors */}
-      <div style={label}>Anchor Origen</div>
-      <select
-        style={input}
-        value={relation.src_anchor ?? "right"}
-        onChange={(e) => fullUpdate({ src_anchor: e.target.value })}
-      >
-        <option value="left">Izquierda</option>
-        <option value="right">Derecha</option>
-        <option value="top">Arriba</option>
-        <option value="bottom">Abajo</option>
-      </select>
-
-      <div style={label}>Anchor Destino</div>
-      <select
-        style={input}
-        value={relation.dst_anchor ?? "left"}
-        onChange={(e) => fullUpdate({ dst_anchor: e.target.value })}
-      >
-        <option value="left">Izquierda</option>
-        <option value="right">Derecha</option>
-        <option value="top">Arriba</option>
-        <option value="bottom">Abajo</option>
-      </select>
-
-      {/* Campo de etiqueta */}
-      <div style={label}>Etiqueta (label)</div>
-      <input
-        style={input}
-        type="text"
-        value={localLabel} // controlado por estado local
-        placeholder={localLabel ? "" : "ej: usa, pertenece, compone"}
-        onChange={(e) => {
-          setLocalLabel(e.target.value);     // actualiza local al instante
-          debouncedUpdate(e.target.value);   // guarda con retardo
-        }}
-      />
-
-      {/* Multiplicidad */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginTop: 12 }}>
-        {/* Origen mín */}
-        <input
-          style={input}
-          type="number"
-          min={0}
-          value={localMultOrigenMin}
-          onChange={(e) => {
-            const val = e.target.value === "" ? null : Number(e.target.value);
-            setLocalMultOrigenMin(e.target.value);   // 👉 actualiza UI en tiempo real
-            // fullUpdate({ mult_origen_min: val });    // 👉 manda al padre/backend
-            fullUpdate({ src_mult_min: val });
+      <div className="scroll" style={{ flex: 1, padding: "var(--sp-4)", display: "grid", gap: "var(--sp-5)", alignContent: "start" }}>
+        {/* Quiénes se conectan */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "var(--sp-2)",
+            padding: "var(--sp-3)",
+            borderRadius: "var(--radius)",
+            background: "var(--surface-2)",
+            fontSize: 13,
           }}
-        />
+        >
+          <strong>{relation.origen_nombre}</strong>
+          <Icon name="chevronRight" size={14} style={{ color: "var(--text-subtle)" }} />
+          <strong>{relation.destino_nombre}</strong>
+        </div>
 
-        {/* Origen máx */}
-        <input
-          style={input}
-          type="text"
-          value={localMultOrigenMax === null ? "*" : localMultOrigenMax}
-          onChange={(e) => {
-            // const val = e.target.value === "*" ? null : Number(e.target.value);
-            const val = e.target.value === "*" || e.target.value === ""
-              ? null
-              : Number(e.target.value);
-            setLocalMultOrigenMax(e.target.value);   // 👉 actualiza local
-            // fullUpdate({ mult_origen_max: val });    // 👉 manda al padre
-            fullUpdate({ src_mult_max: val });
-          }}
-        />
+        {/* Tipo */}
+        <div className="field">
+          <label className="label">Tipo de relación</label>
+          <select className="select" value={relation.type} onChange={(e) => fullUpdate({ type: e.target.value })}>
+            {TIPOS.map((t) => (
+              <option key={t.v} value={t.v}>{t.label}</option>
+            ))}
+          </select>
+          {tipoActual && (
+            <div className="text-subtle" style={{ fontSize: 12 }}>{tipoActual.ayuda}</div>
+          )}
+        </div>
 
-        {/* Destino mín */}
-        <input
-          style={input}
-          type="number"
-          min={0}
-          value={localMultDestinoMin}
-          onChange={(e) => {
-            const val = e.target.value === "" ? null : Number(e.target.value);
-            setLocalMultDestinoMin(e.target.value);
-            // fullUpdate({ mult_destino_min: val });
-            fullUpdate({ dst_mult_min: val });
-          }}
-        />
+        {/* Multiplicidad */}
+        <div style={{ display: "grid", gap: "var(--sp-3)" }}>
+          <h4 className="section-title">Multiplicidad</h4>
 
-        {/* Destino máx */}
-        <input
-          style={input}
-          type="text"
-          value={localMultDestinoMax === null ? "*" : localMultDestinoMax}
-          onChange={(e) => {
-            // const val = e.target.value === "*" ? null : Number(e.target.value);
-            const val = e.target.value === "*" || e.target.value === ""
-              ? null
-              : Number(e.target.value);
-            setLocalMultDestinoMax(e.target.value);
-            // fullUpdate({ mult_destino_max: val });
-            fullUpdate({ dst_mult_max: val });
-          }}
-        />
+          {esHerenciaODependencia ? (
+            <div className="text-subtle" style={{ fontSize: 12 }}>
+              La herencia y la dependencia no llevan multiplicidad.
+            </div>
+          ) : (
+            <>
+              <div className="text-subtle" style={{ fontSize: 12 }}>
+                Cuántos elementos de cada lado participan. Usá <strong>*</strong> para “muchos”.
+              </div>
 
+              {[
+                {
+                  titulo: relation.origen_nombre,
+                  min: localMultOrigenMin,
+                  max: localMultOrigenMax,
+                  setMin: setLocalMultOrigenMin,
+                  setMax: setLocalMultOrigenMax,
+                  keyMin: "src_mult_min",
+                  keyMax: "src_mult_max",
+                },
+                {
+                  titulo: relation.destino_nombre,
+                  min: localMultDestinoMin,
+                  max: localMultDestinoMax,
+                  setMin: setLocalMultDestinoMin,
+                  setMax: setLocalMultDestinoMax,
+                  keyMin: "dst_mult_min",
+                  keyMax: "dst_mult_max",
+                },
+              ].map((lado) => (
+                <div
+                  key={lado.keyMin}
+                  style={{
+                    display: "grid",
+                    gap: "var(--sp-2)",
+                    padding: "var(--sp-3)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
+                    background: "var(--surface-2)",
+                  }}
+                >
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>Lado {lado.titulo}</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-2)" }}>
+                    <div className="field">
+                      <label className="label">Mínimo</label>
+                      <input
+                        className="input input-sm"
+                        type="number"
+                        min={0}
+                        value={lado.min}
+                        onChange={(e) => {
+                          const val = e.target.value === "" ? null : Number(e.target.value);
+                          lado.setMin(e.target.value);
+                          fullUpdate({ [lado.keyMin]: val });
+                        }}
+                      />
+                    </div>
+                    <div className="field">
+                      <label className="label">Máximo</label>
+                      <input
+                        className="input input-sm"
+                        type="text"
+                        value={lado.max === null ? "*" : lado.max}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          const val = raw === "*" || raw === "" ? null : Number(raw);
+                          lado.setMax(raw);
+                          fullUpdate({ [lado.keyMax]: val });
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* Etiqueta */}
+        <div className="field">
+          <label className="label">Etiqueta (opcional)</label>
+          <input
+            className="input"
+            type="text"
+            value={localLabel}
+            placeholder="Ej: realiza, pertenece a"
+            onChange={(e) => {
+              setLocalLabel(e.target.value);
+              debouncedUpdate(e.target.value);
+            }}
+          />
+          <div className="text-subtle" style={{ fontSize: 12 }}>
+            Texto que se muestra sobre la línea en el diagrama.
+          </div>
+        </div>
+
+        {/* Posición de la línea */}
+        <div style={{ display: "grid", gap: "var(--sp-3)" }}>
+          <h4 className="section-title">Posición de la línea</h4>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "var(--sp-2)" }}>
+            <div className="field">
+              <label className="label">Sale por</label>
+              <select
+                className="select input-sm"
+                value={relation.src_anchor ?? "right"}
+                onChange={(e) => fullUpdate({ src_anchor: e.target.value })}
+              >
+                {ANCHORS.map((a) => (
+                  <option key={a.v} value={a.v}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label className="label">Llega por</label>
+              <select
+                className="select input-sm"
+                value={relation.dst_anchor ?? "left"}
+                onChange={(e) => fullUpdate({ dst_anchor: e.target.value })}
+              >
+                {ANCHORS.map((a) => (
+                  <option key={a.v} value={a.v}>{a.label}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
       </div>
     </aside>
   );

@@ -12,7 +12,6 @@ IA quien decide, comando a comando, que tools llamar.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import Any, Optional
 from uuid import UUID
@@ -22,7 +21,6 @@ from sqlalchemy.orm import Session
 from app.models.uml import Atributo, Clase, Diagram, Metodo, RelType, Relacion
 from app.schemas.relacion import RelacionOut
 from app.utils import realtime_events
-from app.ws_manager import ws_manager
 
 logger = logging.getLogger(__name__)
 
@@ -32,27 +30,7 @@ class ToolError(Exception):
     como resultado de error para que pueda corregirse o preguntar."""
 
 
-def _fire(coro):
-    """Programa una notificacion realtime (coroutine) sin bloquear.
-
-    Los routers REST son endpoints `async def` que ya corren en el loop de
-    FastAPI, asi que `asyncio.create_task` funciona directo ahi. El endpoint
-    del asistente de IA es sincrono (para no bloquear el loop durante la
-    llamada de red al modelo) y FastAPI lo corre en un worker thread sin
-    loop propio, donde `asyncio.create_task` falla con "no running event
-    loop". En ese caso programamos la coroutine en el loop principal,
-    capturado en el startup de la app, de forma thread-safe.
-    """
-    try:
-        asyncio.get_running_loop()
-        asyncio.create_task(coro)
-    except RuntimeError:
-        loop = ws_manager.main_loop
-        if loop is None:
-            logger.warning("No se pudo emitir notificacion realtime: loop principal no capturado aun")
-            coro.close()
-            return
-        asyncio.run_coroutine_threadsafe(coro, loop)
+_fire = realtime_events.fire
 
 
 class DiagramToolExecutor:

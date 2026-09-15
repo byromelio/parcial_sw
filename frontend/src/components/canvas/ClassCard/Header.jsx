@@ -1,3 +1,5 @@
+import Icon from "../../common/Icon";
+
 export default function Header({
   innerRef,
   onMouseDown,
@@ -12,9 +14,10 @@ export default function Header({
       ref={innerRef}
       onMouseDown={onMouseDown}
       style={{
-        padding: 8,
-        fontWeight: 700,
-        borderBottom: "1px solid #26314d",
+        padding: "8px 10px",
+        fontWeight: 600,
+        fontSize: 13,
+        borderBottom: "1px solid var(--border)",
         cursor: "grab",
         userSelect: "none",
         display: "flex",
@@ -22,7 +25,7 @@ export default function Header({
         justifyContent: "space-between",
         gap: 8,
       }}
-      title="Arrastra para mover"
+      title="Arrastrá para mover esta clase"
     >
       <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {title}
@@ -30,8 +33,8 @@ export default function Header({
 
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         {showCounts && (
-          <span style={{ fontSize: 11, opacity: 0.85 }}>
-            {(counts.attrs ?? 0)} attrs · {(counts.meths ?? 0)} métodos
+          <span className="text-subtle" style={{ fontSize: 11 }}>
+            {counts.attrs ?? 0} attrs · {counts.meths ?? 0} métodos
           </span>
         )}
         <button
@@ -40,17 +43,21 @@ export default function Header({
             e.stopPropagation();
             setPinned((v) => !v);
           }}
-          title={pinned ? "Desfijar detalles" : "Fijar detalles"}
+          title={pinned ? "Dejar de mostrar siempre los detalles" : "Mostrar siempre los detalles"}
           style={{
-            border: "1px solid #334",
-            background: pinned ? "#334" : "transparent",
-            color: "inherit",
-            borderRadius: 6,
-            padding: "2px 6px",
+            display: "grid",
+            placeItems: "center",
+            width: 22,
+            height: 22,
+            border: "1px solid var(--border)",
+            background: pinned ? "var(--accent-soft)" : "transparent",
+            color: pinned ? "var(--accent)" : "var(--text-subtle)",
+            borderRadius: "var(--radius-sm)",
+            padding: 0,
             cursor: "pointer",
           }}
         >
-          {pinned ? "📌" : "📍"}
+          <Icon name={pinned ? "eye" : "eyeOff"} size={13} />
         </button>
       </div>
     </div>

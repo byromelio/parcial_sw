@@ -1,9 +1,58 @@
- 
+
 # app/utils/realtime_events.py
+import asyncio
+import logging
 from uuid import UUID
 from app.ws_manager import ws_manager
 from app.models.uml import Clase, Atributo, Metodo, Relacion
 from app.schemas.relacion import RelacionOut
+
+logger = logging.getLogger(__name__)
+
+
+def fire(coro):
+    """Programa una notificacion realtime sin bloquear al que la dispara.
+
+    Los routers REST son `async def` y ya corren en el loop de FastAPI, asi
+    que ahi alcanza con create_task. En cambio el asistente de IA corre en un
+    worker thread (endpoint sincrono / BackgroundTask) que no tiene loop
+    propio: desde ahi hay que programar la coroutine en el loop principal,
+    capturado en el startup de la app, de forma thread-safe.
+    """
+    try:
+        asyncio.get_running_loop()
+        asyncio.create_task(coro)
+    except RuntimeError:
+        loop = ws_manager.main_loop
+        if loop is None:
+            logger.warning("No se pudo emitir evento realtime: loop principal no capturado aun")
+            coro.close()
+            return
+        asyncio.run_coroutine_threadsafe(coro, loop)
+
+
+# =========================
+# Asistente de IA
+# =========================
+async def notify_ai_started(diagram_id: UUID, text: str):
+    await ws_manager.broadcast(str(diagram_id), {
+        "event": "ai.started",
+        "data": {"text": text},
+    })
+
+
+async def notify_ai_done(diagram_id: UUID, reply: str, actions: list):
+    await ws_manager.broadcast(str(diagram_id), {
+        "event": "ai.done",
+        "data": {"reply": reply, "actions": actions},
+    })
+
+
+async def notify_ai_error(diagram_id: UUID, detail: str):
+    await ws_manager.broadcast(str(diagram_id), {
+        "event": "ai.error",
+        "data": {"detail": detail},
+    })
 
 
 # =========================

@@ -4,8 +4,8 @@ import { useNavigate } from "react-router-dom";
 import useAuth from "../store/auth";
 import useTheme from "../hooks/useTheme";
 import ApiStatusBadge from "../components/common/ApiStatusBadge";
+import Icon from "../components/common/Icon";
 
-// helpers del módulo diagrams
 import {
   listDiagrams as apiListDiagrams,
   createDiagram as apiCreateDiagram,
@@ -25,24 +25,17 @@ export default function HomePage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+  const [creating, setCreating] = useState(false);
 
-  // === Cargar diagramas ===
   async function load() {
     setLoading(true);
     setMsg("");
-    console.log("🔄 Cargando diagramas...", { page, limit });
-
     try {
       const data = await apiListDiagrams({ page, limit });
-      console.log("✅ Diagramas recibidos:", data);
-
       setDiagrams(data?.items ?? []);
       setTotal(data?.total ?? 0);
     } catch (e) {
-      console.error("❌ Error cargando diagramas:", e);
-      console.error("❌ Respuesta error:", e?.response?.status, e?.response?.data);
-
-      setMsg(e?.response?.data?.detail || "Error al cargar diagramas");
+      setMsg(e?.response?.data?.detail || "No se pudieron cargar los diagramas");
       setDiagrams([]);
       setTotal(0);
     } finally {
@@ -55,226 +48,185 @@ export default function HomePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [page]);
 
-  // === Crear diagrama ===
   async function createDiagram(e) {
     e?.preventDefault?.();
-    if (!title.trim()) return;
-
+    if (!title.trim() || creating) return;
     setMsg("");
-    console.log("🆕 Creando diagrama con título:", title);
-
+    setCreating(true);
     try {
       const d = await apiCreateDiagram(title.trim());
-      console.log("✅ Diagrama creado:", d);
-
       setTitle("");
-      await load();
       nav(`/diagram/${d.id}`);
     } catch (e) {
-      console.error("❌ Error creando diagrama:", e);
-      console.error("❌ Respuesta error:", e?.response?.status, e?.response?.data);
-
-      setMsg(e?.response?.data?.detail || "No se pudo crear");
+      setMsg(e?.response?.data?.detail || "No se pudo crear el diagrama");
+    } finally {
+      setCreating(false);
     }
   }
 
-  // === Eliminar diagrama ===
-  async function removeDiagram(id) {
-    if (!confirm("¿Eliminar diagrama?")) return;
-
-    console.log("🗑️ Eliminando diagrama:", id);
-
+  async function removeDiagram(id, nombre) {
+    if (!confirm(`¿Eliminar el diagrama "${nombre}"? Esta acción no se puede deshacer.`)) return;
     try {
       await apiDeleteDiagram(id);
-      console.log("✅ Diagrama eliminado:", id);
-
       await load();
     } catch (e) {
-      console.error("❌ Error eliminando diagrama:", e);
-      console.error("❌ Respuesta error:", e?.response?.status, e?.response?.data);
-
       alert(e?.response?.data?.detail || "No se pudo eliminar");
     }
   }
 
-  // === Paginación ===
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / limit)), [total, limit]);
 
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateRows: "64px 1fr",
+        gridTemplateRows: "var(--header-h) 1fr",
         height: "100vh",
-        background: "var(--bg, #0b1020)",
-        color: "var(--text, #eaeefb)",
+        background: "var(--bg)",
+        color: "var(--text)",
       }}
     >
-      {/* Header */}
+      {/* ---------- Barra superior ---------- */}
       <header
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 12,
-          padding: "0 16px",
-          borderBottom: "1px solid #213",
-          background: "rgba(0,0,0,.15)",
+          gap: "var(--sp-3)",
+          padding: "0 var(--sp-5)",
+          borderBottom: "1px solid var(--border)",
+          background: "var(--surface-1)",
         }}
       >
-        <strong>UML AI Tool</strong>
+        <Icon name="class" size={18} style={{ color: "var(--accent)" }} />
+        <strong style={{ fontSize: 14 }}>UML Collab Tool</strong>
         <ApiStatusBadge />
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 12 }}>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>{email}</span>
+
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
           <button
+            className="btn btn-ghost btn-icon"
             onClick={toggleTheme}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid #334",
-              background: "transparent",
-              color: "inherit",
-            }}
+            title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
           >
-            {theme === "dark" ? "🌙" : "☀️"}
+            <Icon name={theme === "dark" ? "sun" : "moon"} />
           </button>
+          <div style={{ width: 1, height: 22, background: "var(--border)" }} />
+          <span className="text-muted" style={{ fontSize: 12 }}>{email}</span>
           <button
-            onClick={() => {
-              logout();
-              nav("/login", { replace: true });
-            }}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid #334",
-              background: "transparent",
-              color: "inherit",
-            }}
+            className="btn btn-ghost btn-icon"
+            onClick={() => { logout(); nav("/login", { replace: true }); }}
+            title="Cerrar sesión"
           >
-            Salir
+            <Icon name="logout" />
           </button>
         </div>
       </header>
 
-      {/* Main */}
-      <main style={{ padding: 16, maxWidth: 900, margin: "0 auto", width: "100%" }}>
-        <h3 style={{ marginTop: 0 }}>Diagramas</h3>
-
-        {/* Crear */}
-        <form onSubmit={createDiagram} style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-          <label style={{ fontSize: 12, opacity: 0.8 }}>Título</label>
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Mi primer diagrama"
-            style={{
-              width: "100%",
-              height: 40,
-              padding: "0 12px",
-              borderRadius: 8,
-              border: "1px solid #334",
-              background: "#0e1526",
-              color: "#fff",
-              boxSizing: "border-box",
-            }}
-          />
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button
-              type="submit"
-              style={{
-                padding: "8px 12px",
-                borderRadius: 8,
-                border: "none",
-                background: "#4f46e5",
-                color: "#fff",
-              }}
-            >
-              Crear
-            </button>
-            {msg && <div style={{ fontSize: 12, opacity: 0.8 }}>{msg}</div>}
+      {/* ---------- Contenido ---------- */}
+      <main className="scroll" style={{ padding: "var(--sp-6) var(--sp-5)" }}>
+        <div style={{ maxWidth: 780, margin: "0 auto", display: "grid", gap: "var(--sp-5)" }}>
+          <div>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 650 }}>Mis diagramas</h1>
+            <p className="text-muted" style={{ margin: "var(--sp-2) 0 0", fontSize: 13 }}>
+              Cada diagrama es un modelo de clases UML del que después podés generar
+              un backend Spring Boot completo.
+            </p>
           </div>
-        </form>
 
-        {/* Lista */}
-        {loading ? (
-          <div>Cargando…</div>
-        ) : diagrams.length === 0 ? (
-          <div style={{ opacity: 0.7, fontSize: 14 }}>No hay diagramas.</div>
-        ) : (
-          <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "grid", gap: 8 }}>
-            {diagrams.map((d) => (
-              <li key={d.id} style={{ border: "1px solid #334", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                  <div>
-                    <div style={{ fontWeight: 600 }}>{d.title}</div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>{d.id}</div>
+          {/* Crear */}
+          <form onSubmit={createDiagram} className="card" style={{ display: "grid", gap: "var(--sp-3)" }}>
+            <label className="label" htmlFor="nuevo-diagrama">Crear un diagrama nuevo</label>
+            <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+              <input
+                id="nuevo-diagrama"
+                className="input"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="Ej: Sistema de ventas"
+              />
+              <button type="submit" className="btn btn-primary" disabled={!title.trim() || creating}>
+                <Icon name={creating ? "loader" : "plus"} className={creating ? "spinning" : ""} />
+                {creating ? "Creando…" : "Crear"}
+              </button>
+            </div>
+            {msg && (
+              <div style={{ fontSize: 12, color: "var(--danger)", display: "flex", gap: 6, alignItems: "center" }}>
+                <Icon name="warning" size={13} />
+                {msg}
+              </div>
+            )}
+          </form>
+
+          {/* Lista */}
+          {loading ? (
+            <div className="text-muted" style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center", fontSize: 13 }}>
+              <Icon name="loader" className="spinning" />
+              Cargando…
+            </div>
+          ) : diagrams.length === 0 ? (
+            <div
+              className="card"
+              style={{ display: "grid", gap: "var(--sp-2)", justifyItems: "center", textAlign: "center", padding: "var(--sp-6)" }}
+            >
+              <div
+                style={{
+                  width: 44, height: 44, display: "grid", placeItems: "center",
+                  borderRadius: "var(--radius)", background: "var(--surface-2)", color: "var(--text-subtle)",
+                }}
+              >
+                <Icon name="folder" size={20} />
+              </div>
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Todavía no tenés diagramas</div>
+              <div className="text-muted" style={{ fontSize: 13, maxWidth: 380 }}>
+                Creá el primero con el formulario de arriba. Al abrirlo vas a encontrar una
+                guía paso a paso para empezar.
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: "grid", gap: "var(--sp-2)" }}>
+              {diagrams.map((d) => (
+                <div
+                  key={d.id}
+                  className="card"
+                  style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", padding: "var(--sp-3) var(--sp-4)" }}
+                >
+                  <Icon name="file" size={17} style={{ color: "var(--text-subtle)" }} />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{d.title}</div>
+                    {d.updated_at && (
+                      <div className="text-subtle" style={{ fontSize: 11 }}>
+                        Modificado {new Date(d.updated_at).toLocaleString()}
+                      </div>
+                    )}
                   </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button
-                      type="button"
-                      onClick={() => nav(`/diagram/${d.id}`)}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid #334",
-                        background: "transparent",
-                        color: "inherit",
-                      }}
-                    >
-                      Abrir
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => removeDiagram(d.id)}
-                      style={{
-                        padding: "6px 10px",
-                        borderRadius: 8,
-                        border: "1px solid #334",
-                        background: "transparent",
-                        color: "inherit",
-                      }}
-                    >
-                      Eliminar
-                    </button>
-                  </div>
+                  <button className="btn btn-primary btn-sm" onClick={() => nav(`/diagram/${d.id}`)}>
+                    Abrir
+                  </button>
+                  <button
+                    className="btn btn-danger-ghost btn-icon btn-sm"
+                    onClick={() => removeDiagram(d.id, d.title)}
+                    title="Eliminar diagrama"
+                  >
+                    <Icon name="trash" size={14} />
+                  </button>
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
+              ))}
+            </div>
+          )}
 
-        {/* Paginación */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12 }}>
-          <button
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid #334",
-              background: "transparent",
-              color: "inherit",
-              opacity: page <= 1 ? 0.5 : 1,
-            }}
-          >
-            ←
-          </button>
-          <span style={{ fontSize: 12, opacity: 0.8 }}>
-            Página {page} / {totalPages}
-          </span>
-          <button
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            style={{
-              padding: "6px 10px",
-              borderRadius: 8,
-              border: "1px solid #334",
-              background: "transparent",
-              color: "inherit",
-              opacity: page >= totalPages ? 0.5 : 1,
-            }}
-          >
-            →
-          </button>
+          {/* Paginación */}
+          {totalPages > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-3)", justifyContent: "center" }}>
+              <button className="btn btn-icon btn-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                <Icon name="chevronLeft" size={14} />
+              </button>
+              <span className="text-muted" style={{ fontSize: 12 }}>
+                Página {page} de {totalPages}
+              </span>
+              <button className="btn btn-icon btn-sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
+                <Icon name="chevronRight" size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </main>
     </div>

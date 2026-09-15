@@ -1,11 +1,10 @@
 from pydantic import BaseModel
-from typing import Any
 
 
 class AiCommandIn(BaseModel):
     text: str
 
 
-class AiCommandOut(BaseModel):
-    reply: str
-    actions: list[dict[str, Any]]
+class AiCommandAccepted(BaseModel):
+    """El comando quedo encolado; el resultado llega por WebSocket."""
+    status: str

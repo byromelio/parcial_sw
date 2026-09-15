@@ -69,35 +69,41 @@ export default function useRelations(diagram) {
   useEffect(() => {
     if (!diagram?.id) return;
 
-    // crear
-    onEvent("relation.created", (rel) => {
-      if (rel.diagram_id === diagram.id) {
-        setRelations((prev) => [...prev, rel]);
-      }
-    });
-
-    // actualizar
-    onEvent("relation.updated", (rel) => {
-      if (rel.diagram_id === diagram.id) {
-        setRelations((prev) =>
-          prev.map((r) => (r.id === rel.id ? { ...r, ...rel } : r))
-        );
-        if (selectedRelId === rel.id) {
-          setSelectedRelation(rel); // 👈 actualiza también el detalle abierto
+    // onEvent devuelve la función para desuscribirse: hay que llamarlas en el
+    // cleanup, si no cada re-ejecución del efecto acumula listeners duplicados
+    // y cada relación entrante se aplicaría varias veces.
+    const offs = [
+      onEvent("relation.created", (rel) => {
+        if (rel.diagram_id === diagram.id) {
+          setRelations((prev) =>
+            prev.some((r) => r.id === rel.id) ? prev : [...prev, rel]
+          );
         }
-      }
-    });
+      }),
 
-    // eliminar
-    onEvent("relation.deleted", ({ id, diagram_id }) => {
-      if (diagram_id === diagram.id) {
-        setRelations((prev) => prev.filter((r) => r.id !== id));
-        if (selectedRelId === id) {
-          setSelectedRelId(null);
-          setSelectedRelation(null);
+      onEvent("relation.updated", (rel) => {
+        if (rel.diagram_id === diagram.id) {
+          setRelations((prev) =>
+            prev.map((r) => (r.id === rel.id ? { ...r, ...rel } : r))
+          );
+          if (selectedRelId === rel.id) {
+            setSelectedRelation(rel); // actualiza también el detalle abierto
+          }
         }
-      }
-    });
+      }),
+
+      onEvent("relation.deleted", ({ id, diagram_id }) => {
+        if (diagram_id === diagram.id) {
+          setRelations((prev) => prev.filter((r) => r.id !== id));
+          if (selectedRelId === id) {
+            setSelectedRelId(null);
+            setSelectedRelation(null);
+          }
+        }
+      }),
+    ];
+
+    return () => offs.forEach((off) => off());
   }, [diagram, selectedRelId]);
 
   return {

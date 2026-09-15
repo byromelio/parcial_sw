@@ -1,14 +1,25 @@
-// frontend/src/components/panels/AiAssistantPanel.jsx
+// src/components/panels/AiAssistantPanel.jsx
 //
-// Panel flotante del asistente de IA: el usuario escribe (o dicta por voz)
-// una instruccion puntual ("creá la clase Cliente", "agregale un atributo
-// email a Cliente") y el backend la traduce en llamadas a la API existente.
-// El diagrama se refresca solo via el WebSocket ya conectado (useDiagram /
-// useClassesAndDetails / useRelations), asi que este panel no toca el
-// estado del canvas directamente.
+// Asistente que edita el diagrama por lenguaje natural (texto o voz).
+//
+// El comando NO se resuelve en la respuesta HTTP: el backend lo encola y
+// responde al instante, y tanto el progreso como el resultado llegan por el
+// WebSocket del diagrama (eventos ai.started / ai.done / ai.error). Se hizo
+// así porque la latencia del modelo es muy variable y dejar la petición
+// abierta congelaba la interfaz. Como efecto secundario, las clases y
+// atributos van apareciendo en el lienzo a medida que se ejecutan.
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { sendAiCommand } from "../../api/ai";
+import { onEvent } from "../../api/realtime";
+import Icon from "../common/Icon";
+
+const EJEMPLOS = [
+  "Creá una clase Cliente",
+  "Agregale a Cliente los atributos nombre, email y teléfono",
+  "Creá una relación de uno a muchos entre Cliente y Pedido",
+  "Ponele a Pedido un atributo total de tipo Double",
+];
 
 const SpeechRecognitionApi =
   typeof window !== "undefined"
@@ -18,33 +29,57 @@ const SpeechRecognitionApi =
 export default function AiAssistantPanel({ diagramId }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
-  const [log, setLog] = useState([]); // [{role: 'user'|'assistant'|'error', text}]
-  const [sending, setSending] = useState(false);
+  const [log, setLog] = useState([]); // {role: 'user'|'assistant'|'error', text}
+  const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef(null);
+  const logEndRef = useRef(null);
+
+  // ---- Resultados del asistente (llegan por WebSocket) ----
+  useEffect(() => {
+    if (!diagramId) return;
+    const offs = [
+      onEvent("ai.done", ({ reply }) => {
+        setLog((prev) => [...prev, { role: "assistant", text: reply }]);
+        setBusy(false);
+      }),
+      onEvent("ai.error", ({ detail }) => {
+        setLog((prev) => [...prev, { role: "error", text: detail }]);
+        setBusy(false);
+      }),
+    ];
+    return () => offs.forEach((off) => off());
+  }, [diagramId]);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [log, busy]);
 
   const send = async (commandText) => {
     const value = (commandText ?? text).trim();
-    if (!value || sending) return;
+    if (!value || busy) return;
 
     setLog((prev) => [...prev, { role: "user", text: value }]);
     setText("");
-    setSending(true);
+    setBusy(true);
 
     try {
-      const res = await sendAiCommand(diagramId, value);
-      setLog((prev) => [...prev, { role: "assistant", text: res.reply }]);
+      await sendAiCommand(diagramId, value);
+      // El resultado llega por WebSocket; acá solo confirmamos que se encoló.
     } catch (err) {
-      const detail = err?.response?.data?.detail || "No se pudo procesar el comando.";
+      const detail =
+        err?.response?.data?.detail || "No se pudo enviar el comando al servidor.";
       setLog((prev) => [...prev, { role: "error", text: detail }]);
-    } finally {
-      setSending(false);
+      setBusy(false);
     }
   };
 
   const toggleVoice = () => {
     if (!SpeechRecognitionApi) {
-      alert("Este navegador no soporta reconocimiento de voz (probá con Chrome).");
+      setLog((prev) => [
+        ...prev,
+        { role: "error", text: "Este navegador no reconoce voz. Probá con Google Chrome." },
+      ]);
       return;
     }
     if (listening) {
@@ -56,7 +91,6 @@ export default function AiAssistantPanel({ diagramId }) {
     rec.lang = "es-ES";
     rec.interimResults = false;
     rec.maxAlternatives = 1;
-
     rec.onstart = () => setListening(true);
     rec.onend = () => setListening(false);
     rec.onerror = () => setListening(false);
@@ -64,120 +98,175 @@ export default function AiAssistantPanel({ diagramId }) {
       const transcript = e.results?.[0]?.[0]?.transcript;
       if (transcript) send(transcript);
     };
-
     recognitionRef.current = rec;
     rec.start();
   };
 
+  // ---------------- Botón flotante (cerrado) ----------------
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="btn btn-primary"
+        style={{
+          position: "absolute",
+          right: "var(--sp-4)",
+          bottom: "var(--sp-4)",
+          height: 44,
+          padding: "0 var(--sp-4)",
+          borderRadius: 999,
+          boxShadow: "var(--shadow)",
+          zIndex: 20,
+        }}
+      >
+        <Icon name="sparkles" size={18} />
+        Asistente
+      </button>
+    );
+  }
+
+  // ---------------- Panel abierto ----------------
   return (
-    <div style={{ position: "absolute", right: 16, bottom: 16, zIndex: 20 }}>
-      {open && (
-        <div
-          style={{
-            width: 340,
-            height: 420,
-            marginBottom: 8,
-            display: "flex",
-            flexDirection: "column",
-            background: "var(--panel-bg, #131a2e)",
-            color: "var(--text, #eaeefb)",
-            border: "1px solid rgba(255,255,255,0.12)",
-            borderRadius: 10,
-            overflow: "hidden",
-            boxShadow: "0 8px 24px rgba(0,0,0,0.35)",
-          }}
-        >
+    <div
+      className="panel"
+      style={{
+        position: "absolute",
+        right: "var(--sp-4)",
+        bottom: "var(--sp-4)",
+        width: 380,
+        height: 460,
+        display: "flex",
+        flexDirection: "column",
+        boxShadow: "var(--shadow-lg)",
+        zIndex: 20,
+        overflow: "hidden",
+      }}
+    >
+      {/* Encabezado */}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--sp-2)",
+          padding: "var(--sp-3) var(--sp-4)",
+          borderBottom: "1px solid var(--border)",
+        }}
+      >
+        <Icon name="sparkles" size={16} style={{ color: "var(--accent)" }} />
+        <strong style={{ fontSize: 13, flex: 1 }}>Asistente del diagrama</strong>
+        <button className="btn btn-ghost btn-icon btn-sm" onClick={() => setOpen(false)} title="Cerrar">
+          <Icon name="close" size={15} />
+        </button>
+      </div>
+
+      {/* Conversación */}
+      <div
+        className="scroll"
+        style={{ flex: 1, padding: "var(--sp-4)", display: "flex", flexDirection: "column", gap: "var(--sp-3)" }}
+      >
+        {log.length === 0 && (
+          <div style={{ display: "grid", gap: "var(--sp-3)" }}>
+            <p className="text-muted" style={{ margin: 0, fontSize: 13 }}>
+              Escribí lo que querés hacer y yo lo aplico en el diagrama. Probá con uno
+              de estos ejemplos:
+            </p>
+            <div style={{ display: "grid", gap: "var(--sp-2)" }}>
+              {EJEMPLOS.map((ej) => (
+                <button
+                  key={ej}
+                  onClick={() => send(ej)}
+                  style={{
+                    textAlign: "left",
+                    padding: "var(--sp-2) var(--sp-3)",
+                    border: "1px solid var(--border)",
+                    borderRadius: "var(--radius)",
+                    background: "var(--surface-2)",
+                    color: "var(--text)",
+                    font: "inherit",
+                    fontSize: 12,
+                    cursor: "pointer",
+                  }}
+                >
+                  {ej}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {log.map((m, i) => (
           <div
+            key={i}
             style={{
-              padding: "10px 12px",
-              fontWeight: 600,
-              borderBottom: "1px solid rgba(255,255,255,0.12)",
+              alignSelf: m.role === "user" ? "flex-end" : "flex-start",
+              maxWidth: "88%",
+              padding: "var(--sp-2) var(--sp-3)",
+              borderRadius: "var(--radius)",
+              fontSize: 13,
+              lineHeight: 1.45,
+              ...(m.role === "user"
+                ? { background: "var(--accent)", color: "var(--accent-text)" }
+                : m.role === "error"
+                ? { background: "var(--danger-soft)", color: "var(--danger)", border: "1px solid var(--danger)" }
+                : { background: "var(--surface-2)", color: "var(--text)" }),
             }}
           >
-            Asistente del diagrama
-          </div>
-
-          <div style={{ flex: 1, overflowY: "auto", padding: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-            {log.length === 0 && (
-              <div style={{ opacity: 0.6, fontSize: 13 }}>
-                Pedime ediciones puntuales, ej: "creá una clase Cliente", "agregale un
-                atributo email de tipo String a Cliente", "creá una relación de uno a
-                muchos entre Cliente y Pedido".
+            {m.role === "error" && (
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2, fontWeight: 600 }}>
+                <Icon name="warning" size={13} />
+                No se pudo completar
               </div>
             )}
-            {log.map((m, i) => (
-              <div
-                key={i}
-                style={{
-                  alignSelf: m.role === "user" ? "flex-end" : "flex-start",
-                  maxWidth: "85%",
-                  padding: "6px 10px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  background:
-                    m.role === "user"
-                      ? "var(--accent, #3b82f6)"
-                      : m.role === "error"
-                      ? "#7f1d1d"
-                      : "rgba(255,255,255,0.08)",
-                }}
-              >
-                {m.text}
-              </div>
-            ))}
-            {sending && <div style={{ opacity: 0.6, fontSize: 13 }}>Pensando…</div>}
+            {m.text}
           </div>
+        ))}
 
-          <div style={{ display: "flex", gap: 6, padding: 8, borderTop: "1px solid rgba(255,255,255,0.12)" }}>
-            <input
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && send()}
-              placeholder="Escribí un comando…"
-              style={{ flex: 1, padding: "6px 8px", borderRadius: 6, border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "inherit" }}
-            />
-            <button
-              onClick={toggleVoice}
-              title="Dictar por voz"
-              style={{
-                padding: "6px 10px",
-                borderRadius: 6,
-                border: "1px solid rgba(255,255,255,0.2)",
-                background: listening ? "#dc2626" : "transparent",
-                color: "inherit",
-                cursor: "pointer",
-              }}
-            >
-              🎤
-            </button>
-            <button
-              onClick={() => send()}
-              disabled={sending}
-              style={{ padding: "6px 10px", borderRadius: 6, border: "none", background: "var(--accent, #3b82f6)", color: "#fff", cursor: "pointer" }}
-            >
-              Enviar
-            </button>
+        {busy && (
+          <div
+            className="text-muted"
+            style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: 12 }}
+          >
+            <Icon name="loader" size={14} className="spinning" />
+            Aplicando los cambios en el diagrama…
           </div>
-        </div>
-      )}
+        )}
+        <div ref={logEndRef} />
+      </div>
 
-      <button
-        onClick={() => setOpen((v) => !v)}
+      {/* Entrada */}
+      <div
         style={{
-          width: 52,
-          height: 52,
-          borderRadius: "50%",
-          border: "none",
-          background: "var(--accent, #3b82f6)",
-          color: "#fff",
-          fontSize: 22,
-          cursor: "pointer",
-          boxShadow: "0 4px 12px rgba(0,0,0,0.35)",
+          display: "flex",
+          gap: "var(--sp-2)",
+          padding: "var(--sp-3)",
+          borderTop: "1px solid var(--border)",
         }}
-        title="Asistente de IA"
       >
-        {open ? "✕" : "💬"}
-      </button>
+        <input
+          className="input"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && send()}
+          placeholder={listening ? "Escuchando…" : "Ej: creá una clase Factura"}
+          disabled={busy}
+        />
+        <button
+          className={`btn btn-icon ${listening ? "btn-active" : ""}`}
+          onClick={toggleVoice}
+          disabled={busy}
+          title="Dictar por voz"
+        >
+          <Icon name="mic" />
+        </button>
+        <button
+          className="btn btn-primary btn-icon"
+          onClick={() => send()}
+          disabled={busy || !text.trim()}
+          title="Enviar comando"
+        >
+          <Icon name="send" />
+        </button>
+      </div>
     </div>
   );
 }

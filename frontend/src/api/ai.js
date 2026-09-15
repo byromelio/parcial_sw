@@ -1,20 +1,20 @@
 import api from "./client";
 
 /**
- * Envia un comando en lenguaje natural (texto, o voz ya transcripta) para
- * que el asistente de IA edite el diagrama. El diagrama se actualiza solo
- * via el WebSocket existente (mismo canal que usan las ediciones manuales),
- * asi que esta funcion no necesita devolver el diagrama actualizado.
+ * Encola un comando en lenguaje natural (texto, o voz ya transcripta) para
+ * que el asistente edite el diagrama.
+ *
+ * Responde apenas se encola (202). El resultado NO viene acá: llega por el
+ * WebSocket del diagrama como evento `ai.done` o `ai.error`, y los cambios
+ * en sí llegan como los eventos normales (class.created, attribute.created…),
+ * igual que si otro usuario los hubiera hecho a mano.
  */
 export const sendAiCommand = (diagramId, text) => {
-  // Un comando de IA puede implicar varias vueltas de ida y vuelta con el
-  // modelo (tool calls + confirmacion final), asi que el timeout global de
-  // axios (10s, pensado para CRUD simple) no alcanza. Le damos mas margen.
   return api
-    .post(`/diagrams/${diagramId}/ai/command`, { text }, { timeout: 45000 })
+    .post(`/diagrams/${diagramId}/ai/command`, { text })
     .then((r) => r.data)
     .catch((err) => {
-      console.error("❌ [sendAiCommand] error:", err?.response?.data || err);
+      console.error("[sendAiCommand] error:", err?.response?.data || err);
       throw err;
     });
 };

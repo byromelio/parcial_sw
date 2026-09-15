@@ -3,10 +3,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
-// ===== API endpoints (backend REST) =====
-// import { listRelations, createRelation } from "../api/relations";
-// import { updateRelation, deleteRelation } from "../api/relations";
-
 // ===== utilidades geométricas para canvas =====
 import { hitTestClasses, inferClosestSide } from "../components/canvas/utils/geometry";
 
@@ -19,6 +15,7 @@ import useDiagram from "../hooks/useDiagram";
 import useClassesAndDetails from "../hooks/useClassesAndDetails";
 import useRelations from "../hooks/useRelations";
 import useExportDiagram from "../hooks/useExport";
+
 // ===== componentes de UI =====
 import Sheet from "../components/canvas/Sheet";
 import ClassCard from "../components/canvas/ClassCard";
@@ -26,101 +23,85 @@ import ConnectionLayer from "../components/canvas/ConnectionLayer";
 import Inspector from "../components/panels/Inspector";
 import RelationInspector from "../components/panels/RelationInspector";
 import AiAssistantPanel from "../components/panels/AiAssistantPanel";
+import HelpGuide from "../components/common/HelpGuide";
+import Icon from "../components/common/Icon";
 
 // ===== layout =====
 import HeaderBar from "../components/layout/HeaderBar";
 import LeftPanel from "../components/layout/LeftPanel";
 
+const HELP_SEEN_KEY = "uml.help.seen";
 
-// =====================================================
-// 🔹 Componente principal: Dashboard de diagramas UML
-// =====================================================
 export default function DiagramDashboard() {
-  const { id } = useParams();       // Obtiene el diagramId desde la URL
+  const { id } = useParams();
   const nav = useNavigate();
 
-  // 🔐 Estado global de autenticación
   const logout = useAuth((s) => s.logout);
   const email = useAuth((s) => s.email);
 
-  // 🎨 Tema claro/oscuro
   const { theme, toggleTheme } = useTheme();
-
-  // 📄 Hook que carga los datos del diagrama actual
   const { diagram, loading, err } = useDiagram(id);
 
-  // 🔗 Relaciones entre clases
-  // const [relations, setRelations] = useState([]);
-  const [linking, setLinking] = useState(null); // si el usuario está creando relación
-  const [camera, setCamera] = useState({ x: 0, y: 0, z: 1 }); // zoom/pan del canvas
-const { exportDiagram, loading: exporting } = useExportDiagram();
-  // 🎯 Selección actual (relación/clase)
-  // const [selectedRelId, setSelectedRelId] = useState(null);
-  // const selectedRel = relations.find(r => r.id === selectedRelId) || null;
+  const [linking, setLinking] = useState(null);
+  const [camera, setCamera] = useState({ x: 0, y: 0, z: 1 });
+  const [showHelp, setShowHelp] = useState(false);
+
+  const { exportDiagram, loading: exporting } = useExportDiagram();
+
   const {
     relations,
     selectedRelId, setSelectedRelId,
     selectedRelation: selectedRel,
-    createRelation, updateRelation, deleteRelation
+    createRelation, updateRelation, deleteRelation,
   } = useRelations(diagram);
-  // const [setRelations] = useState([]);
 
-  // 📦 Hook centralizado para manejar clases y detalles
   const {
-    classes, setClasses,
+    classes,
     selectedId, setSelectedId, selected,
-    detailsByClass, replaceDetails,
+    detailsByClass,
     insertMode, setInsertMode,
     insertName, setInsertName,
-    loadClasses, fetchDetails,
+    fetchDetails,
     handleCanvasClick,
-    debouncedSave, onBlurName,
     handleDragEnd, handleResizeEnd,
     handleDelete,
-    // 🔹 Atributos
     addAttr, patchAttr, removeAttr,
-    // 🔹 Métodos
     addMeth, patchMeth, removeMeth,
   } = useClassesAndDetails(diagram);
 
+  // La guía se abre sola la primera vez que alguien usa la herramienta.
+  useEffect(() => {
+    if (!localStorage.getItem(HELP_SEEN_KEY)) setShowHelp(true);
+  }, []);
+
+  const closeHelp = () => {
+    localStorage.setItem(HELP_SEEN_KEY, "1");
+    setShowHelp(false);
+  };
+
   // =====================================================
-  // 🔹 Manejar "linking" (cuando el usuario conecta clases)
+  // Crear relación arrastrando entre clases
   // =====================================================
   useEffect(() => {
     if (!linking) return;
 
-    // Detecta si el mouse está sobre una clase (DOM → dataset)
     const hitTestByDom = (pt) => {
       const stack = document.elementsFromPoint(pt.x, pt.y) || [];
       const el = stack.find((n) => n?.getAttribute && n.getAttribute("data-class-id"));
-      if (el) {
-        return el.getAttribute("data-class-id") || null;
-      }
-      return null;
+      return el ? el.getAttribute("data-class-id") || null : null;
     };
 
-    // Mientras se mueve el mouse, actualiza cursor
     const onMove = (e) => {
-      setLinking((prev) => prev ? { ...prev, cursor: { x: e.clientX, y: e.clientY } } : prev);
+      setLinking((prev) => (prev ? { ...prev, cursor: { x: e.clientX, y: e.clientY } } : prev));
     };
 
-    // Al soltar el mouse → intenta crear relación
     const onUp = async (e) => {
       const pt = { x: e.clientX, y: e.clientY };
-      let toId = hitTestByDom(pt) || hitTestClasses(pt, classes);
+      const toId = hitTestByDom(pt) || hitTestClasses(pt, classes);
 
-      // if (toId && toId !== linking.fromId) {
-      if (toId) { //permite dibujar recursiva mas
+      if (toId) {
         const dstSide = inferClosestSide(toId, pt);
         try {
-          // const r = await createRelation(diagram.id, {
-          //   from_class: linking.fromId,
-          //   to_class: toId,
-          //   type: "ASSOCIATION", // tipo por defecto
-          //   src_anchor: linking.fromSide,
-          //   dst_anchor: dstSide,
-          // });
-          // setRelations((prev) => [...prev, r]);
           await createRelation({
             from_class: linking.fromId,
             to_class: toId,
@@ -135,138 +116,217 @@ const { exportDiagram, loading: exporting } = useExportDiagram();
       setLinking(null);
     };
 
-    // Suscribir listeners globales
     window.addEventListener("mousemove", onMove, true);
     window.addEventListener("mouseup", onUp, true);
-
     return () => {
       window.removeEventListener("mousemove", onMove, true);
       window.removeEventListener("mouseup", onUp, true);
     };
   }, [linking, classes, diagram?.id]);
 
-
   // =====================================================
-  // 🔹 Manejo de estados de carga y errores
+  // Carga / error
   // =====================================================
-  if (loading) return <div style={{ padding: 16 }}>Cargando…</div>;
-  if (err) {
+  if (loading) {
     return (
-      <div style={{ padding: 16 }}>
-        <div style={{ marginBottom: 8, color: "salmon" }}>{err}</div>
-        <button onClick={() => nav("/")} style={{ padding: "6px 10px" }}>
-          Volver
-        </button>
+      <div style={{ height: "100vh", display: "grid", placeItems: "center", background: "var(--bg)", color: "var(--text)" }}>
+        <div style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center" }} className="text-muted">
+          <Icon name="loader" className="spinning" />
+          Cargando diagrama…
+        </div>
       </div>
     );
   }
+
+  if (err) {
+    return (
+      <div style={{ height: "100vh", display: "grid", placeItems: "center", background: "var(--bg)", color: "var(--text)" }}>
+        <div className="card" style={{ display: "grid", gap: "var(--sp-3)", justifyItems: "center", maxWidth: 360, textAlign: "center" }}>
+          <Icon name="warning" size={22} style={{ color: "var(--danger)" }} />
+          <div style={{ fontWeight: 600 }}>No se pudo abrir el diagrama</div>
+          <div className="text-muted" style={{ fontSize: 13 }}>{err}</div>
+          <button className="btn btn-primary" onClick={() => nav("/")}>Volver a mis diagramas</button>
+        </div>
+      </div>
+    );
+  }
+
   if (!diagram) return null;
 
-
-  // =====================================================
-  // 🔹 Handlers para actualizar / eliminar relaciones
-  // =====================================================
   const handleUpdateRelation = async (patch) => {
     try {
-      const updated = await updateRelation(selectedRel.id, patch);
-      //   setRelations((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
-      //
+      await updateRelation(selectedRel.id, patch);
     } catch {
       alert("No se pudo actualizar la relación");
     }
   };
 
   const handleDeleteRelation = async () => {
-    if (!window.confirm("¿Eliminar esta relación?")) return;
     try {
       await deleteRelation(selectedRel.id);
-      // setRelations((prev) => prev.filter((r) => r.id !== selectedRel.id));
       setSelectedRelId(null);
     } catch {
       alert("No se pudo eliminar la relación");
     }
   };
 
-
   // =====================================================
-  // 🔹 Render principal (UI)
+  // Render
   // =====================================================
   return (
     <div
       style={{
         display: "grid",
-        gridTemplateRows: "64px 1fr",   // header arriba, resto abajo
+        gridTemplateRows: "var(--header-h) 1fr",
         height: "100vh",
-        background: "var(--bg, #0b1020)",
-        color: "var(--text, #eaeefb)",
+        background: "var(--bg)",
+        color: "var(--text)",
+        overflow: "hidden",
       }}
     >
-      {/* Barra superior con acciones */}
       <HeaderBar
         diagram={diagram}
         email={email}
         theme={theme}
         toggleTheme={toggleTheme}
-        insertName={insertName}
-        setInsertName={setInsertName}
         insertMode={insertMode}
         setInsertMode={setInsertMode}
         onBack={() => nav("/")}
         onLogout={() => { logout(); nav("/login", { replace: true }); }}
-          onExport={() => exportDiagram(diagram.id)}   // 👈 pasamos handler
-  exporting={exporting}  
-    />
+        onExport={() => exportDiagram(diagram.id)}
+        exporting={exporting}
+        onOpenHelp={() => setShowHelp(true)}
+      />
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "100px 1fr minmax(300px, 420px)", // panel izq controla el tamaño
-          height: "100%",
-        }}
-      >
-        {/* Panel lateral izquierdo */}
-        <LeftPanel />
+      <div style={{ display: "flex", minHeight: 0 }}>
+        <LeftPanel
+          classes={classes}
+          relations={relations}
+          selectedId={selectedId}
+          selectedRelId={selectedRelId}
+          onSelectClass={(cid) => { setSelectedId(cid); setSelectedRelId(null); }}
+          onSelectRelation={(rid) => { setSelectedRelId(rid); setSelectedId(null); }}
+        />
 
-        {/* Área central: canvas con clases y relaciones */}
-        <main style={{ position: "relative" }}>
+        {/* ---------------- Lienzo ---------------- */}
+        <main style={{ position: "relative", flex: 1, minWidth: 0 }}>
+          {/* Instrucción del modo insertar */}
+          {insertMode && (
+            <div
+              style={{
+                position: "absolute",
+                top: "var(--sp-4)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 15,
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--sp-3)",
+                padding: "var(--sp-2) var(--sp-3)",
+                borderRadius: "var(--radius)",
+                background: "var(--surface-1)",
+                border: "1px solid var(--accent)",
+                boxShadow: "var(--shadow)",
+              }}
+            >
+              <Icon name="info" size={15} style={{ color: "var(--accent)" }} />
+              <span style={{ fontSize: 13 }}>Escribí el nombre y hacé clic en el lienzo:</span>
+              <input
+                className="input input-sm"
+                style={{ width: 150 }}
+                value={insertName}
+                onChange={(e) => setInsertName(e.target.value)}
+                placeholder="Ej: Cliente"
+                autoFocus
+              />
+              <button className="btn btn-sm" onClick={() => setInsertMode(false)}>
+                Cancelar
+              </button>
+            </div>
+          )}
+
+          {/* Estado vacío: qué hacer cuando el diagrama recién arranca */}
+          {classes.length === 0 && !insertMode && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 0,
+                display: "grid",
+                placeItems: "center",
+                pointerEvents: "none",
+                zIndex: 5,
+              }}
+            >
+              <div
+                className="panel"
+                style={{
+                  pointerEvents: "auto",
+                  padding: "var(--sp-5)",
+                  maxWidth: 380,
+                  textAlign: "center",
+                  display: "grid",
+                  gap: "var(--sp-3)",
+                  justifyItems: "center",
+                  boxShadow: "var(--shadow)",
+                }}
+              >
+                <div
+                  style={{
+                    width: 44, height: 44, display: "grid", placeItems: "center",
+                    borderRadius: "var(--radius)", background: "var(--accent-soft)", color: "var(--accent)",
+                  }}
+                >
+                  <Icon name="class" size={20} />
+                </div>
+                <div style={{ fontWeight: 600 }}>Este diagrama está vacío</div>
+                <div className="text-muted" style={{ fontSize: 13 }}>
+                  Empezá creando tu primera clase. Podés hacerlo vos mismo o pedírselo
+                  al asistente escribiendo o hablando.
+                </div>
+                <div style={{ display: "flex", gap: "var(--sp-2)" }}>
+                  <button className="btn btn-primary" onClick={() => setInsertMode(true)}>
+                    <Icon name="plus" />
+                    Crear una clase
+                  </button>
+                  <button className="btn" onClick={() => setShowHelp(true)}>
+                    <Icon name="help" />
+                    Ver la guía
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Sheet onCanvasClick={handleCanvasClick} onCameraChange={setCamera}>
             {classes.map((c) => (
               <ClassCard
                 key={c.id}
                 cls={c}
                 selected={c.id === selectedId}
-                onSelect={(id) => { setSelectedId(id); setSelectedRelId(null); }}
+                onSelect={(cid) => { setSelectedId(cid); setSelectedRelId(null); }}
                 onDragEnd={handleDragEnd}
                 onResizeEnd={handleResizeEnd}
                 details={detailsByClass[c.id]}
                 alwaysShowDetails={true}
                 showLinkPortsOnHover={true}
                 forceShowPorts={!!linking && c.id !== linking?.fromId}
-                onStartLink={(fromId, side, pt) => {
-                  setLinking({ fromId, fromSide: side, cursor: pt });
-                }}
+                onStartLink={(fromId, side, pt) => setLinking({ fromId, fromSide: side, cursor: pt })}
               />
             ))}
           </Sheet>
 
-          {/* Capa de conexiones entre clases */}
           <ConnectionLayer
             classes={classes}
-            tempLink={linking ? {
-              fromId: linking.fromId,
-              fromSide: linking.fromSide,
-              cursor: linking.cursor,
-            } : null
-            }
+            tempLink={linking ? { fromId: linking.fromId, fromSide: linking.fromSide, cursor: linking.cursor } : null}
             relations={relations}
             camera={camera}
-            onSelectRelation={(id) => { setSelectedRelId(id); setSelectedId(null); }}
+            onSelectRelation={(rid) => { setSelectedRelId(rid); setSelectedId(null); }}
           />
 
           <AiAssistantPanel diagramId={diagram.id} />
         </main>
 
-        {/* Panel lateral derecho: inspector de clase o relación */}
+        {/* ---------------- Panel derecho ---------------- */}
         {selectedRel ? (
           <RelationInspector
             relation={selectedRel}
@@ -277,12 +337,8 @@ const { exportDiagram, loading: exporting } = useExportDiagram();
           <Inspector
             selected={selected}
             details={selected ? detailsByClass[selected.id] : undefined}
-            onRename={(name) => selected && handleRename(selected.id, name)}
-            onDetailsChange={(patch) => selected && replaceDetails(selected.id, patch)}
             reloadDetails={() => selected && fetchDetails(selected.id)}
             onDeleteClass={() => selected && handleDelete(selected.id)}
-
-            // 🔹 nuevas props (vienen del hook)
             onAddAttr={(cid) => addAttr(cid)}
             onPatchAttr={(cid, aid, patch) => patchAttr(cid, aid, patch)}
             onRemoveAttr={(cid, aid) => removeAttr(cid, aid)}
@@ -290,9 +346,10 @@ const { exportDiagram, loading: exporting } = useExportDiagram();
             onPatchMeth={(cid, mid, patch) => patchMeth(cid, mid, patch)}
             onRemoveMeth={(cid, mid) => removeMeth(cid, mid)}
           />
-
         )}
       </div>
+
+      {showHelp && <HelpGuide onClose={closeHelp} />}
     </div>
   );
 }

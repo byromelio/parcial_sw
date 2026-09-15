@@ -1,54 +1,76 @@
 import { WS_URL } from "../config";
 
-let socket = null;     // 🔹 referencia al WebSocket activo
-let listeners = {};    // 🔹 diccionario de eventos → callbacks registrados
+// Canal WebSocket del diagrama: por acá llegan los cambios que hacen los
+// demás usuarios y también el progreso del asistente de IA.
+//
+// Los listeners viven aparte del socket a propósito: antes `connect()` los
+// borraba a todos, así que cualquier componente que se suscribiera antes de
+// que se abriera la conexión (por el orden en que React corre los efectos)
+// se quedaba sin recibir nada.
 
-// ====== CONECTAR AL SERVIDOR WS ======
-export function connect(diagramId) {
-  // Si ya hay un socket abierto, primero lo desconectamos
-  if (socket) disconnect();
+let socket = null;
+let currentDiagramId = null;
+const listeners = new Map(); // event -> Set<callback>
 
-  // 🔌 Crear conexión WebSocket al backend
-  socket = new WebSocket(`${WS_URL}/diagrams/${diagramId}/ws`);
-
-  // Cuando se abre la conexión
-  socket.onopen = () => {
-    console.log("✅ Conectado a WS", diagramId);
-  };
-
-  // Cuando llega un mensaje desde el backend
-  socket.onmessage = (event) => {
-    const msg = JSON.parse(event.data);  // 👈 parsea JSON entrante
-    console.log("📩 Evento recibido:", msg);
-
-    // Si hay listeners registrados para ese tipo de evento → ejecutarlos
-    if (listeners[msg.event]) {
-      listeners[msg.event].forEach(cb => cb(msg.data));
+function emit(event, data) {
+  const subs = listeners.get(event);
+  if (!subs) return;
+  for (const cb of subs) {
+    try {
+      cb(data);
+    } catch (err) {
+      console.error(`[realtime] error en listener de "${event}":`, err);
     }
-  };
-
-  // Cuando se cierra la conexión
-  socket.onclose = () => {
-    console.log("❌ WS cerrado");
-  };
-}
-
-// ====== DESCONECTAR DEL SERVIDOR WS ======
-export function disconnect() {
-  if (socket) {
-    socket.close();   // cerrar conexión activa
-    socket = null;    // limpiar referencia
-    listeners = {};   // limpiar todos los listeners registrados
   }
 }
 
-// ====== REGISTRAR EVENTOS ======
+export function connect(diagramId) {
+  // Ya conectados a este mismo diagrama: no reabrir.
+  if (socket && currentDiagramId === diagramId && socket.readyState <= WebSocket.OPEN) {
+    return;
+  }
+
+  closeSocket();
+  currentDiagramId = diagramId;
+  socket = new WebSocket(`${WS_URL}/diagrams/${diagramId}/ws`);
+
+  socket.onopen = () => console.log("[realtime] conectado al diagrama", diagramId);
+
+  socket.onmessage = (event) => {
+    let msg;
+    try {
+      msg = JSON.parse(event.data);
+    } catch {
+      console.warn("[realtime] mensaje no es JSON:", event.data);
+      return;
+    }
+    emit(msg.event, msg.data);
+  };
+
+  socket.onclose = () => console.log("[realtime] conexión cerrada");
+  socket.onerror = (e) => console.error("[realtime] error de conexión:", e);
+}
+
+function closeSocket() {
+  if (!socket) return;
+  socket.onclose = null;
+  socket.close();
+  socket = null;
+}
+
+export function disconnect() {
+  closeSocket();
+  currentDiagramId = null;
+}
+
 /**
- * Suscribe un callback a un tipo de evento recibido por WS.
- * @param {string} event - nombre del evento (ej. "class.created")
- * @param {function} callback - función que se ejecutará al recibir el evento
+ * Suscribe un callback a un evento del diagrama.
+ * @returns {() => void} función para darse de baja.
  */
 export function onEvent(event, callback) {
-  if (!listeners[event]) listeners[event] = [];
-  listeners[event].push(callback);
+  if (!listeners.has(event)) listeners.set(event, new Set());
+  listeners.get(event).add(callback);
+  return () => {
+    listeners.get(event)?.delete(callback);
+  };
 }

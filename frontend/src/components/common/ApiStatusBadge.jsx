@@ -6,25 +6,30 @@ export default function ApiStatusBadge() {
 
   useEffect(() => {
     let mounted = true;
-    api.get("/health")
+    api
+      .get("/health")
       .then(() => mounted && setOk(true))
       .catch(() => mounted && setOk(false));
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, []);
 
-  const color = ok === null ? "#999" : ok ? "green" : "crimson";
-  const text = ok === null ? "checking…" : ok ? "API OK" : "API OFF";
+  const clase = ok === null ? "badge-muted" : ok ? "badge-success" : "badge-danger";
+  const texto = ok === null ? "Conectando…" : ok ? "Servidor conectado" : "Servidor sin conexión";
 
   return (
-    <span style={{
-      padding: "4px 8px",
-      borderRadius: 8,
-      background: color,
-      color: "white",
-      fontSize: 12,
-      marginLeft: 8
-    }}>
-      {text}
+    <span className={`badge ${clase}`} title="Estado de la conexión con el servidor">
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: "50%",
+          background: "currentColor",
+          display: "inline-block",
+        }}
+      />
+      {texto}
     </span>
   );
 }

@@ -1,92 +1,108 @@
 // src/components/layout/HeaderBar.jsx
-//(mismos estilos/acciones)
+import Icon from "../common/Icon";
+
+function timeAgo(iso) {
+  if (!iso) return null;
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return "hace un momento";
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)} h`;
+  return new Date(iso).toLocaleDateString();
+}
+
 export default function HeaderBar({
   diagram,
   email,
   theme,
   toggleTheme,
   onBack,
-  insertName, setInsertName,
-  insertMode, setInsertMode,
+  insertMode,
+  setInsertMode,
   onLogout,
-     onExport,   // 👈 nueva prop
+  onExport,
   exporting,
+  onOpenHelp,
 }) {
-  const input = {
-    width: "100%",
-    height: 32,
-    padding: "0 10px",
-    borderRadius: 8,
-    border: "1px solid #334",
-    background: "#0e1526",
-    color: "#fff",
-    boxSizing: "border-box",
-  };
-
   return (
     <header
       style={{
-        display: "flex", alignItems: "center", gap: 12,
-        padding: "0 16px", borderBottom: "1px solid #213",
-        background: "rgba(0,0,0,.15)",
+        height: "var(--header-h)",
+        display: "flex",
+        alignItems: "center",
+        gap: "var(--sp-3)",
+        padding: "0 var(--sp-4)",
+        borderBottom: "1px solid var(--border)",
+        background: "var(--surface-1)",
       }}
     >
-      <button
-        onClick={onBack}
-        style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334", background: "transparent", color: "inherit" }}
-      >
-        ← Volver
+      <button className="btn btn-ghost btn-icon" onClick={onBack} title="Volver a mis diagramas">
+        <Icon name="back" />
       </button>
-      <strong style={{ fontSize: 16 }}>{diagram.title}</strong>
-      <span style={{ fontSize: 12, opacity: 0.8 }}>ID: {diagram.id}</span>
-      <span style={{ fontSize: 12, opacity: 0.8, marginLeft: 8 }}>
-        Actualizado: {new Date(diagram.updated_at).toLocaleString()}
-      </span>
-<button
-  onClick={onExport}
-  disabled={exporting}
-  style={{
-    padding: "6px 10px",
-    borderRadius: 8,
-    border: "1px solid #334",
-    background: exporting ? "#888" : "#4f46e5",
-    color: "#fff",
-    fontWeight: 600,
-  }}
->
-  {exporting ? "Exportando…" : "⬇ Exportar backend"}
-</button>
-      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
-        <input
-          value={insertName}
-          onChange={(e) => setInsertName(e.target.value)}
-          placeholder="Nombre a insertar"
-          style={{ ...input, width: 180 }}
-        />
 
-        {/* para insertar la clase */}
-        <button
-          onClick={() => setInsertMode((v) => !v)}
+      <div style={{ minWidth: 0 }}>
+        <div
           style={{
-            padding: "6px 10px", borderRadius: 8, border: "1px solid #334",
-            background: insertMode ? "#334" : "transparent", color: "inherit", fontWeight: 600,
+            fontSize: 14,
+            fontWeight: 600,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
           }}
-          title="Modo insertar: click en la hoja crea una clase"
         >
-          {insertMode ? "🟢 Insertando…" : "➕ Insertar clase"}
-        </button>
-        <span style={{ fontSize: 12, opacity: 0.8 }}>{email}</span>
+          {diagram.title}
+        </div>
+        <div className="text-subtle" style={{ fontSize: 11 }}>
+          Guardado {timeAgo(diagram.updated_at)}
+        </div>
+      </div>
+
+      <div style={{ marginLeft: "var(--sp-4)", display: "flex", gap: "var(--sp-2)" }}>
         <button
+          className={`btn ${insertMode ? "btn-active" : ""}`}
+          onClick={() => setInsertMode((v) => !v)}
+          title="Agregar una clase nueva al diagrama"
+        >
+          <Icon name="plus" />
+          Nueva clase
+        </button>
+
+        <button
+          className="btn"
+          onClick={onExport}
+          disabled={exporting}
+          title="Generar el proyecto Spring Boot a partir de este diagrama"
+        >
+          <Icon name={exporting ? "loader" : "download"} className={exporting ? "spinning" : ""} />
+          {exporting ? "Generando…" : "Exportar backend"}
+        </button>
+      </div>
+
+      <div
+        style={{
+          marginLeft: "auto",
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--sp-2)",
+        }}
+      >
+        <button className="btn btn-ghost btn-icon" onClick={onOpenHelp} title="¿Cómo se usa esta herramienta?">
+          <Icon name="help" />
+        </button>
+        <button
+          className="btn btn-ghost btn-icon"
           onClick={toggleTheme}
-          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334", background: "transparent", color: "inherit" }}
+          title={theme === "dark" ? "Cambiar a tema claro" : "Cambiar a tema oscuro"}
         >
-          {theme === "dark" ? "🌙" : "☀️"}
+          <Icon name={theme === "dark" ? "sun" : "moon"} />
         </button>
-        <button
-          onClick={onLogout}
-          style={{ padding: "6px 10px", borderRadius: 8, border: "1px solid #334", background: "transparent", color: "inherit" }}
-        >
-          Salir
+
+        <div style={{ width: 1, height: 22, background: "var(--border)" }} />
+
+        <span className="text-muted" style={{ fontSize: 12 }}>
+          {email}
+        </span>
+        <button className="btn btn-ghost btn-icon" onClick={onLogout} title="Cerrar sesión">
+          <Icon name="logout" />
         </button>
       </div>
     </header>
