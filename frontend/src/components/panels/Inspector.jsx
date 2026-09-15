@@ -212,6 +212,8 @@ export default function Inspector({
     background: "var(--surface-1)",
     display: "flex",
     flexDirection: "column",
+    position: "relative",
+    zIndex: "var(--z-chrome)",
   };
 
   // ---------- Sin selección ----------

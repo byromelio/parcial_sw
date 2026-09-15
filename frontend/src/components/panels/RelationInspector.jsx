@@ -66,6 +66,8 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
     background: "var(--surface-1)",
     display: "flex",
     flexDirection: "column",
+    position: "relative",
+    zIndex: "var(--z-chrome)",
   };
 
   if (!relation) {

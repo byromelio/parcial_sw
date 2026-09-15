@@ -270,7 +270,7 @@ export default function DiagramDashboard() {
                 top: "var(--sp-4)",
                 left: "50%",
                 transform: "translateX(-50%)",
-                zIndex: 15,
+                zIndex: "var(--z-banner)",
                 display: "flex",
                 alignItems: "center",
                 gap: "var(--sp-3)",
@@ -306,7 +306,7 @@ export default function DiagramDashboard() {
                 display: "grid",
                 placeItems: "center",
                 pointerEvents: "none",
-                zIndex: 5,
+                zIndex: "var(--z-banner)",
               }}
             >
               <div
@@ -383,7 +383,7 @@ export default function DiagramDashboard() {
                 bottom: "var(--sp-4)",
                 left: "50%",
                 transform: "translateX(-50%)",
-                zIndex: 25,
+                zIndex: "var(--z-toast)",
                 display: "flex",
                 alignItems: "center",
                 gap: "var(--sp-2)",

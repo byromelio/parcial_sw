@@ -21,7 +21,7 @@
 //         position: "absolute",
 //         inset: 0,
 //         pointerEvents: "none", // los hijos reactivan eventos
-//         zIndex: 1000,
+//         zIndex: "var(--z-canvas)",
 //       }}
 //     >
 //       {PORTS.map((p) => (
@@ -84,7 +84,7 @@ export default function Ports({ visible, onStartLink }) {
         position: "absolute",
         inset: 0,
         pointerEvents: "none", // los hijos reactivan eventos
-        zIndex: 1000,
+        zIndex: "var(--z-canvas)",
       }}
     >
       {PORTS.map((p) => (

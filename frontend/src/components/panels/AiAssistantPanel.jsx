@@ -116,7 +116,7 @@ export default function AiAssistantPanel({ diagramId }) {
           padding: "0 var(--sp-4)",
           borderRadius: 999,
           boxShadow: "var(--shadow)",
-          zIndex: 20,
+          zIndex: "var(--z-float)",
         }}
       >
         <Icon name="sparkles" size={18} />
@@ -138,7 +138,7 @@ export default function AiAssistantPanel({ diagramId }) {
         display: "flex",
         flexDirection: "column",
         boxShadow: "var(--shadow-lg)",
-        zIndex: 20,
+        zIndex: "var(--z-float)",
         overflow: "hidden",
       }}
     >

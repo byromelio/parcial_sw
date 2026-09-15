@@ -102,7 +102,10 @@ export default function ConnectionLayer({
         inset: 0,
         pointerEvents: "none",
         overflow: "visible",
-        zIndex: 9999,
+        // Por encima de las tarjetas, pero por debajo de los paneles y de
+        // los diálogos: al estar en position fixed, un z-index alto hacía
+        // que las líneas se dibujaran encima de toda la interfaz.
+        zIndex: "var(--z-connections)",
       }}
     >
       <defs>

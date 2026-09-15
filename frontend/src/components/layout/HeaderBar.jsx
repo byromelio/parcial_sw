@@ -35,6 +35,8 @@ export default function HeaderBar({
         padding: "0 var(--sp-4)",
         borderBottom: "1px solid var(--border)",
         background: "var(--surface-1)",
+        position: "relative",
+        zIndex: "var(--z-chrome)",
       }}
     >
       <button className="btn btn-ghost btn-icon" onClick={onBack} title="Volver a mis diagramas">

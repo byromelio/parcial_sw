@@ -26,6 +26,8 @@ export default function LeftPanel({
         background: "var(--surface-1)",
         display: "flex",
         flexDirection: "column",
+        position: "relative",
+        zIndex: "var(--z-chrome)",
       }}
     >
       {/* ---------- Clases ---------- */}
@@ -138,21 +140,6 @@ export default function LeftPanel({
         )}
       </div>
 
-      {/* ---------- Ayuda rápida, siempre visible ---------- */}
-      <div style={{ marginTop: "auto", padding: "var(--sp-4)", borderTop: "1px solid var(--border)" }}>
-        <h3 className="section-title" style={{ marginBottom: "var(--sp-3)" }}>
-          Cómo trabajar
-        </h3>
-        <ol
-          className="text-muted"
-          style={{ margin: 0, paddingLeft: 16, fontSize: 12, display: "grid", gap: "var(--sp-2)" }}
-        >
-          <li>Creá clases con <strong>Nueva clase</strong> y un clic en el lienzo.</li>
-          <li>Seleccioná una clase para editar sus atributos a la derecha.</li>
-          <li>Conectá clases arrastrando desde su borde.</li>
-          <li>O pedíselo todo al <strong>asistente</strong>, abajo a la derecha.</li>
-        </ol>
-      </div>
     </aside>
   );
 }

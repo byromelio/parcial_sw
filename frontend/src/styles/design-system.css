@@ -60,6 +60,18 @@
   --header-h: 56px;
   --panel-w: 264px;
   --inspector-w: 340px;
+
+  /* Capas (z-index). Escala única para todo el editor: la capa de
+     relaciones se dibuja en coordenadas de pantalla (position: fixed), así
+     que sin un orden explícito las líneas se superponen a los paneles y a
+     los diálogos. */
+  --z-canvas: 1;          /* tarjetas de clase */
+  --z-connections: 5;     /* líneas de relación: sobre las tarjetas */
+  --z-chrome: 10;         /* barra superior y paneles laterales */
+  --z-banner: 15;         /* aviso del modo insertar */
+  --z-float: 20;          /* asistente flotante */
+  --z-toast: 25;          /* avisos temporales */
+  --z-modal: 100;         /* diálogos */
 }
 
 [data-theme="light"] {
@@ -327,7 +339,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: var(--sp-4);
-  z-index: 100;
+  z-index: var(--z-modal);
 }
 
 .modal {
