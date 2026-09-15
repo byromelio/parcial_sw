@@ -31,6 +31,7 @@ export default function ClassCard({
   onStartLink,
   showLinkPortsOnHover = false,
   forceShowPorts = false, // ⬅️ nuevo
+  lockedByOther = null,   // email de quien la tiene bloqueada, o null
 }) {
   const { CELL } = SHEET;
   const headerRef = useRef(null);
@@ -83,9 +84,13 @@ export default function ClassCard({
         left, top, width, height,
         overflow: "visible",       // 🔑 para que los puertos puedan “salir”
         zIndex: cls.z_index ?? 1,
-        cursor: dragging ? "grabbing" : "default",
+        cursor: dragging ? "grabbing" : lockedByOther ? "not-allowed" : "default",
       }}
-      title={selected ? "Seleccionada" : "Click para seleccionar"}
+      title={
+        lockedByOther
+          ? `La está editando ${lockedByOther}`
+          : selected ? "Seleccionada" : "Click para seleccionar"
+      }
     >
       {/* HALO de hover (invisible), más grande que el card para cubrir los puertos */}
       <div
@@ -106,29 +111,34 @@ export default function ClassCard({
           position: "absolute",
           inset: 0,
           background: "var(--surface-1)",
-          border: selected ? "2px solid var(--accent)" : "1px solid var(--border-strong)",
+          border: lockedByOther
+            ? "2px solid var(--warning)"
+            : selected ? "2px solid var(--accent)" : "1px solid var(--border-strong)",
           borderRadius: "var(--radius)",
           color: "var(--text)",
-          boxShadow: selected ? "0 0 0 3px var(--accent-soft), var(--shadow)" : "var(--shadow-sm)",
+          boxShadow: lockedByOther
+            ? "0 0 0 3px var(--warning-soft), var(--shadow)"
+            : selected ? "0 0 0 3px var(--accent-soft), var(--shadow)" : "var(--shadow-sm)",
           overflow: "hidden",
           transition: "box-shadow .15s, border-color .15s, background .15s",
         }}
       >
         <Header
           innerRef={headerRef}
-          onMouseDown={onHeaderMouseDown}
+          onMouseDown={lockedByOther ? undefined : onHeaderMouseDown}
           title={cls.name ?? cls.nombre ?? "Clase"}
           pinned={pinned}
           setPinned={setPinned}
           showCounts={showCounts}
           counts={counts}
+          lockedByOther={lockedByOther}
         />
 
         <Body innerRef={bodyRef} showDetails={showDetails} details={details} size={size} />
 
         {/* Handle de resize */}
         <div
-          onMouseDown={onHandleMouseDown}
+          onMouseDown={lockedByOther ? undefined : onHandleMouseDown}
           style={{
             position: "absolute",
             right: 2, bottom: 2,

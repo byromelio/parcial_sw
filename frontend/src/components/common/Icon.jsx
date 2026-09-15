@@ -125,6 +125,12 @@ const PATHS = {
       <path d="M12 9v4M12 17h.01" />
     </>
   ),
+  lock: (
+    <>
+      <rect x="4" y="11" width="16" height="10" rx="2" />
+      <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+    </>
+  ),
   info: (
     <>
       <circle cx="12" cy="12" r="10" />

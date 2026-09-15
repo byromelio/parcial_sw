@@ -1,7 +1,9 @@
 import { WS_URL } from "../config";
+import { getToken } from "../store/auth";
 
 // Canal WebSocket del diagrama: por acá llegan los cambios que hacen los
-// demás usuarios y también el progreso del asistente de IA.
+// demás usuarios, el progreso del asistente de IA, y el estado de
+// exclusión mutua (qué clase está bloqueada y por quién).
 //
 // Los listeners viven aparte del socket a propósito: antes `connect()` los
 // borraba a todos, así que cualquier componente que se suscribiera antes de
@@ -10,6 +12,7 @@ import { WS_URL } from "../config";
 
 let socket = null;
 let currentDiagramId = null;
+let myConnId = null; // id de ESTA conexion, para distinguir mis locks de los de otra pestaña/persona
 const listeners = new Map(); // event -> Set<callback>
 
 function emit(event, data) {
@@ -32,7 +35,12 @@ export function connect(diagramId) {
 
   closeSocket();
   currentDiagramId = diagramId;
-  socket = new WebSocket(`${WS_URL}/diagrams/${diagramId}/ws`);
+  myConnId = null;
+  // El WebSocket nativo del navegador no permite mandar headers custom
+  // (no hay forma de poner Authorization ahí), así que el token viaja por
+  // query string. El backend lo valida antes de aceptar la conexión.
+  const token = getToken();
+  socket = new WebSocket(`${WS_URL}/diagrams/${diagramId}/ws?token=${encodeURIComponent(token || "")}`);
 
   socket.onopen = () => console.log("[realtime] conectado al diagrama", diagramId);
 
@@ -44,6 +52,13 @@ export function connect(diagramId) {
       console.warn("[realtime] mensaje no es JSON:", event.data);
       return;
     }
+    // "connected" es interno: guarda el id de ESTA conexión (distinto por
+    // pestaña, aunque sea el mismo usuario logueado) antes de reenviar
+    // nada a los listeners, así isLockedByOther ya tiene con qué comparar.
+    if (msg.event === "connected") {
+      myConnId = msg.data?.conn_id ?? null;
+      return;
+    }
     emit(msg.event, msg.data);
   };
 
@@ -53,7 +68,16 @@ export function connect(diagramId) {
 
 function closeSocket() {
   if (!socket) return;
+  // Un mensaje que ya estaba en vuelo para ESTA conexión puede llegar
+  // después de decidir reemplazarla (típico con React StrictMode en
+  // desarrollo, que monta/desmonta/remonta los efectos): sin desconectar
+  // los cuatro handlers, ese "connected" tardío pisaba `myConnId` con el
+  // id de la conexión vieja, y la pestaña terminaba viendo su propio lock
+  // como si fuera de otra persona.
+  socket.onopen = null;
+  socket.onmessage = null;
   socket.onclose = null;
+  socket.onerror = null;
   socket.close();
   socket = null;
 }
@@ -61,6 +85,26 @@ function closeSocket() {
 export function disconnect() {
   closeSocket();
   currentDiagramId = null;
+}
+
+function send(payload) {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify(payload));
+}
+
+/** Pide el lock de exclusión mutua sobre una clase. */
+export function requestLock(classId) {
+  send({ action: "lock", class_id: classId });
+}
+
+/** Libera el lock de una clase (al deseleccionarla o salir del diagrama). */
+export function releaseLock(classId) {
+  send({ action: "unlock", class_id: classId });
+}
+
+/** El id de conexión que me asignó el backend (null hasta que llega). */
+export function getConnId() {
+  return myConnId;
 }
 
 /**

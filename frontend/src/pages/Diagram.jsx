@@ -1,6 +1,6 @@
 // frontend/src/pages/Diagram.jsx
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 
 // ===== utilidades geométricas para canvas =====
@@ -16,6 +16,7 @@ import useDiagram from "../hooks/useDiagram";
 import useClassesAndDetails from "../hooks/useClassesAndDetails";
 import useRelations from "../hooks/useRelations";
 import useExportDiagram from "../hooks/useExport";
+import useDiagramLocks from "../hooks/useLocks";
 
 // ===== componentes de UI =====
 import Sheet from "../components/canvas/Sheet";
@@ -112,6 +113,42 @@ export default function DiagramDashboard() {
     addAttr, patchAttr, removeAttr,
     addMeth, patchMeth, removeMeth,
   } = useClassesAndDetails(diagram);
+
+  // =====================================================
+  // Exclusión mutua: al seleccionar una clase se pide su lock; al
+  // deseleccionarla (o cambiar de selección) se suelta. El backend es quien
+  // decide si el lock se otorga o no.
+  // =====================================================
+  const { lockClass, unlockClass, isLockedByOther, lockOwner } = useDiagramLocks(
+    diagram?.id,
+    (classId, lockedBy) => {
+      const clase = classes.find((c) => c.id === classId);
+      setAviso({
+        tipo: "error",
+        texto: `${clase?.name ?? "Esa clase"} la está editando ${lockedBy || "otra persona"} ahora mismo.`,
+      });
+      // El backend nunca me dio el lock: si igual quedó seleccionada acá,
+      // deselecciono para no mostrar un editor sobre algo que no puedo tocar.
+      setSelectedId((cur) => (cur === classId ? null : cur));
+    }
+  );
+
+  const lockedClassRef = useRef(null);
+  useEffect(() => {
+    if (lockedClassRef.current && lockedClassRef.current !== selectedId) {
+      unlockClass(lockedClassRef.current);
+    }
+    if (selectedId) lockClass(selectedId);
+    lockedClassRef.current = selectedId;
+  }, [selectedId, lockClass, unlockClass]);
+
+  // Al salir del diagrama (desmontar), soltar el lock que haya quedado.
+  useEffect(() => {
+    return () => {
+      if (lockedClassRef.current) unlockClass(lockedClassRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // La guía se abre sola la primera vez que alguien usa la herramienta.
   useEffect(() => {
@@ -298,7 +335,11 @@ export default function DiagramDashboard() {
           relations={relations}
           selectedId={selectedId}
           selectedRelId={selectedRelId}
-          onSelectClass={(cid) => { setSelectedId(cid); setSelectedRelId(null); }}
+          onSelectClass={(cid) => {
+            if (isLockedByOther(cid)) return;
+            setSelectedId(cid);
+            setSelectedRelId(null);
+          }}
           onSelectRelation={(rid) => { setSelectedRelId(rid); setSelectedId(null); }}
         />
 
@@ -397,7 +438,11 @@ export default function DiagramDashboard() {
                 key={c.id}
                 cls={c}
                 selected={c.id === selectedId}
-                onSelect={(cid) => { setSelectedId(cid); setSelectedRelId(null); }}
+                onSelect={(cid) => {
+                  if (isLockedByOther(cid)) return; // seleccionar no sirve de nada si no puedo editarla
+                  setSelectedId(cid);
+                  setSelectedRelId(null);
+                }}
                 onDragEnd={handleDragEnd}
                 onResizeEnd={handleResizeEnd}
                 details={detailsByClass[c.id]}
@@ -405,6 +450,7 @@ export default function DiagramDashboard() {
                 showLinkPortsOnHover={true}
                 forceShowPorts={!!linking && c.id !== linking?.fromId}
                 onStartLink={(fromId, side, pt) => setLinking({ fromId, fromSide: side, cursor: pt })}
+                lockedByOther={isLockedByOther(c.id) ? lockOwner(c.id) : null}
               />
             ))}
           </Sheet>
