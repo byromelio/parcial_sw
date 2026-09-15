@@ -7,11 +7,15 @@ completo a partir de un problema descrito. Solo ejecuta ediciones puntuales
 sobre lo que el usuario le va pidiendo, una instruccion a la vez, usando las
 tools de ai_tools.py -- las mismas operaciones que ya expone la API REST.
 
-Flujo: texto del usuario -> Claude decide que tool(s) llamar -> se ejecutan
-contra la base de datos -> se le devuelve el resultado a Claude -> Claude
+Flujo: texto del usuario -> Gemini decide que tool(s) llamar -> se ejecutan
+contra la base de datos -> se le devuelve el resultado a Gemini -> Gemini
 responde en lenguaje natural confirmando lo que hizo (o explicando por que
 no pudo). El flujo web es sincrono: la voz se transcribe en el cliente (Web
-Speech API / equivalente) y llega aca ya como texto.
+Speech API) y llega aca ya como texto.
+
+Usa Google Gemini (google-genai) en vez de un proveedor de pago: el
+enunciado no exige un proveedor de IA en particular para el editor, y
+Gemini tiene capa gratuita sin tarjeta.
 """
 from __future__ import annotations
 
@@ -19,8 +23,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-import anthropic
-from sqlalchemy.orm import Session
+from google import genai
 
 from app.core.config import settings
 from app.models.uml import Diagram
@@ -28,8 +31,9 @@ from app.services.ai_tools import DiagramToolExecutor, ToolError, TOOLS
 
 logger = logging.getLogger(__name__)
 
-MODEL = "claude-opus-5"
+MODEL = "gemini-3.5-flash-lite"
 MAX_TOOL_TURNS = 6  # tope de vueltas del loop para evitar bucles infinitos
+REQUEST_TIMEOUT = 30.0  # segundos; evita que una request cuelgue indefinidamente
 
 SYSTEM_PROMPT = """Sos el asistente de edicion de un editor colaborativo de \
 diagramas de clases UML. Un disenador de software te da instrucciones en \
@@ -51,7 +55,7 @@ Reglas estrictas:
    ejemplo el usuario escribio mal un nombre y hay uno muy parecido) o si \
    necesitas preguntarle al usuario.
 4. Despues de ejecutar las herramientas, respondé siempre en español, breve \
-   y en confirmando exactamente que se hizo. No inventes cambios que no \
+   y confirmando exactamente que se hizo. No inventes cambios que no \
    hiciste.
 5. Si el pedido no tiene nada que ver con editar el diagrama, respondé que \
    solo podes editar el diagrama de clases.
@@ -64,75 +68,64 @@ class AiCommandResult:
     actions: list[dict] = field(default_factory=list)
 
 
-def run_command(db: Session, diagram: Diagram, user_text: str) -> AiCommandResult:
-    if not settings.ANTHROPIC_API_KEY:
+def run_command(db, diagram: Diagram, user_text: str) -> AiCommandResult:
+    if not settings.GEMINI_API_KEY:
         raise RuntimeError(
-            "ANTHROPIC_API_KEY no esta configurada en el backend (.env)."
+            "GEMINI_API_KEY no esta configurada en el backend (.env)."
         )
 
-    client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
+    client = genai.Client(api_key=settings.GEMINI_API_KEY)
     executor = DiagramToolExecutor(db, diagram)
 
     state = json.dumps(executor.snapshot(), ensure_ascii=False)
-    messages: list[dict] = [
-        {
-            "role": "user",
-            "content": (
-                f"Estado actual del diagrama (JSON):\n{state}\n\n"
-                f"Instruccion del usuario:\n{user_text}"
-            ),
-        }
-    ]
+    prompt = (
+        f"Estado actual del diagrama (JSON):\n{state}\n\n"
+        f"Instruccion del usuario:\n{user_text}"
+    )
 
     actions: list[dict] = []
 
+    interaction = client.interactions.create(
+        model=MODEL,
+        input=prompt,
+        system_instruction=SYSTEM_PROMPT,
+        tools=TOOLS,
+        timeout=REQUEST_TIMEOUT,
+    )
+
     for _ in range(MAX_TOOL_TURNS):
-        response = client.messages.create(
-            model=MODEL,
-            max_tokens=2048,
-            system=SYSTEM_PROMPT,
-            tools=TOOLS,
-            messages=messages,
-        )
+        call_steps = [s for s in interaction.steps if s.type == "function_call"]
+        if not call_steps:
+            return AiCommandResult(reply=interaction.output_text or "Listo.", actions=actions)
 
-        if response.stop_reason != "tool_use":
-            final_text = "".join(b.text for b in response.content if b.type == "text").strip()
-            return AiCommandResult(reply=final_text or "Listo.", actions=actions)
-
-        messages.append({"role": "assistant", "content": response.content})
-
-        tool_results = []
-        for block in response.content:
-            if block.type != "tool_use":
-                continue
-
-            logger.info(f"🤖 [AI TOOL] {block.name} -> {block.input}")
+        function_results = []
+        for step in call_steps:
+            logger.info(f"🤖 [AI TOOL] {step.name} -> {step.arguments}")
             try:
-                fn = getattr(executor, block.name)
-                result = fn(**block.input)
-                actions.append({"tool": block.name, "input": block.input, "result": result})
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": json.dumps(result, ensure_ascii=False),
-                })
+                fn = getattr(executor, step.name)
+                result = fn(**step.arguments)
+                actions.append({"tool": step.name, "input": step.arguments, "result": result})
+                payload = json.dumps(result, ensure_ascii=False)
             except ToolError as e:
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": str(e),
-                    "is_error": True,
-                })
+                payload = json.dumps({"error": str(e)}, ensure_ascii=False)
             except Exception as e:
-                logger.error(f"❌ [AI TOOL] error ejecutando {block.name}: {e}")
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": f"Error interno ejecutando la herramienta: {e}",
-                    "is_error": True,
-                })
+                logger.error(f"❌ [AI TOOL] error ejecutando {step.name}: {e}")
+                payload = json.dumps({"error": f"Error interno: {e}"}, ensure_ascii=False)
 
-        messages.append({"role": "user", "content": tool_results})
+            function_results.append({
+                "type": "function_result",
+                "name": step.name,
+                "call_id": step.id,
+                "result": [{"type": "text", "text": payload}],
+            })
+
+        interaction = client.interactions.create(
+            model=MODEL,
+            input=function_results,
+            tools=TOOLS,
+            previous_interaction_id=interaction.id,
+            timeout=REQUEST_TIMEOUT,
+        )
 
     return AiCommandResult(
         reply="Se alcanzo el limite de pasos para este comando; intenta dividirlo en instrucciones mas simples.",

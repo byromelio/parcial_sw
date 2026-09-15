@@ -1,5 +1,6 @@
 # app/ws_manager.py
-from typing import Dict, List
+import asyncio
+from typing import Dict, List, Optional
 from fastapi import WebSocket
 
 class WSManager:
@@ -11,6 +12,10 @@ class WSManager:
     def __init__(self):
         # Diccionario { diagram_id: [lista de websockets conectados] }
         self.active_connections: Dict[str, List[WebSocket]] = {}
+        # Loop principal de FastAPI/uvicorn, capturado en el evento de startup.
+        # Lo necesitan las notificaciones disparadas desde endpoints sincronos
+        # (corren en un worker thread sin loop propio, ej. el asistente de IA).
+        self.main_loop: Optional[asyncio.AbstractEventLoop] = None
 
     async def connect(self, diagram_id: str, websocket: WebSocket):
         """Registrar nueva conexión en un diagrama"""

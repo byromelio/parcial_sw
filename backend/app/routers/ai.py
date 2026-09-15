@@ -1,7 +1,6 @@
 # app/routers/ai.py
 import logging
 
-import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -16,6 +15,23 @@ from ._helpers import get_my_diagram
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/diagrams", tags=["ai"])
+
+# El SDK de Gemini (google-genai) expone su jerarquia de excepciones de la
+# API de "interactions" desde un modulo interno (google.genai._gaos...),
+# no desde google.genai.errors -- e importar un modulo con "_" es fragil
+# entre versiones. Clasificamos por el NOMBRE de la clase de excepcion en
+# vez de importarla directamente; los nombres (AuthenticationError,
+# RateLimitError, etc.) siguen la convencion estandar de SDKs de IA.
+_ERROR_MAP: dict[str, tuple[int, str]] = {
+    "authenticationerror": (502, "La API key de Gemini configurada no es válida."),
+    "permissiondeniederror": (502, "La API key de Gemini no tiene permiso para este modelo."),
+    "ratelimiterror": (429, "Se alcanzó el límite de uso gratuito de la API de Gemini. Esperá un momento y reintentá."),
+    "notfounderror": (502, "El modelo de Gemini configurado no existe o no está disponible."),
+    "badrequesterror": (502, "Gemini rechazó la solicitud (parámetros inválidos)."),
+    "apitimeouterror": (504, "Gemini tardó demasiado en responder. Reintentá el comando."),
+    "apiconnectionerror": (502, "No se pudo conectar con la API de Gemini. Revisá tu conexión a internet."),
+    "internalservererror": (502, "Error del servidor de Gemini, reintentá en unos segundos."),
+}
 
 
 @router.post("/{diagram_id}/ai/command", response_model=AiCommandOut)
@@ -32,23 +48,13 @@ def ai_command(
         result = run_command(db, diagram, body.text)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
-    except anthropic.AuthenticationError:
-        raise HTTPException(status_code=502, detail="La API key de Anthropic configurada no es válida.")
-    except anthropic.PermissionDeniedError:
-        raise HTTPException(status_code=502, detail="La API key de Anthropic no tiene permiso para este modelo.")
-    except anthropic.RateLimitError:
-        raise HTTPException(status_code=429, detail="Se alcanzó el límite de uso de la API de Anthropic. Reintentá en unos segundos.")
-    except anthropic.BadRequestError as e:
-        msg = getattr(e, "message", None) or str(e)
-        if "credit balance" in msg.lower():
-            raise HTTPException(
-                status_code=402,
-                detail="La cuenta de Anthropic no tiene crédito suficiente. Cargá crédito en console.anthropic.com → Plans & Billing.",
-            )
-        raise HTTPException(status_code=502, detail=f"Anthropic rechazó la solicitud: {msg}")
-    except anthropic.APIConnectionError:
-        raise HTTPException(status_code=502, detail="No se pudo conectar con la API de Anthropic. Revisá tu conexión a internet.")
-    except anthropic.APIStatusError as e:
-        raise HTTPException(status_code=502, detail=f"Error de la API de Anthropic: {e.message}")
+    except Exception as e:
+        key = type(e).__name__.lower()
+        if key in _ERROR_MAP:
+            status_code, detail = _ERROR_MAP[key]
+            logger.warning(f"⚠️ [AI COMMAND] {type(e).__name__}: {e}")
+            raise HTTPException(status_code=status_code, detail=detail)
+        logger.error(f"❌ [AI COMMAND] error inesperado: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=502, detail=f"Error inesperado del asistente de IA: {e}")
 
     return AiCommandOut(reply=result.reply, actions=result.actions)

@@ -7,12 +7,13 @@ resuelve clases/relaciones por nombre en vez de UUID, porque el usuario le
 habla al asistente por nombre ("la clase Cliente"), no por id.
 
 Restriccion pedida por la catedra: el asistente NUNCA genera el diagrama
-completo de una sola vez. Cada tool es una edicion puntual; es Claude quien
-decide, comando a comando, que tools llamar.
+completo de una sola vez. Cada tool es una edicion puntual; es el modelo de
+IA quien decide, comando a comando, que tools llamar.
 """
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any, Optional
 from uuid import UUID
 
@@ -21,15 +22,37 @@ from sqlalchemy.orm import Session
 from app.models.uml import Atributo, Clase, Diagram, Metodo, RelType, Relacion
 from app.schemas.relacion import RelacionOut
 from app.utils import realtime_events
+from app.ws_manager import ws_manager
+
+logger = logging.getLogger(__name__)
 
 
 class ToolError(Exception):
-    """Error esperado (ej. 'no existe la clase X') que se le devuelve a Claude
-    como tool_result con is_error=True para que pueda corregirse o preguntar."""
+    """Error esperado (ej. 'no existe la clase X') que se le devuelve al modelo
+    como resultado de error para que pueda corregirse o preguntar."""
 
 
 def _fire(coro):
-    asyncio.create_task(coro)
+    """Programa una notificacion realtime (coroutine) sin bloquear.
+
+    Los routers REST son endpoints `async def` que ya corren en el loop de
+    FastAPI, asi que `asyncio.create_task` funciona directo ahi. El endpoint
+    del asistente de IA es sincrono (para no bloquear el loop durante la
+    llamada de red al modelo) y FastAPI lo corre en un worker thread sin
+    loop propio, donde `asyncio.create_task` falla con "no running event
+    loop". En ese caso programamos la coroutine en el loop principal,
+    capturado en el startup de la app, de forma thread-safe.
+    """
+    try:
+        asyncio.get_running_loop()
+        asyncio.create_task(coro)
+    except RuntimeError:
+        loop = ws_manager.main_loop
+        if loop is None:
+            logger.warning("No se pudo emitir notificacion realtime: loop principal no capturado aun")
+            coro.close()
+            return
+        asyncio.run_coroutine_threadsafe(coro, loop)
 
 
 class DiagramToolExecutor:
@@ -308,9 +331,9 @@ def _parse_multiplicity(value: Optional[str]) -> tuple[int, Optional[int]]:
 
 
 # =====================================================================
-# Definicion de tools en formato Anthropic (json schema por tool)
+# Definicion de tools (json schema por tool, neutral respecto al proveedor)
 # =====================================================================
-TOOLS: list[dict[str, Any]] = [
+_RAW_TOOLS: list[dict[str, Any]] = [
     {
         "name": "create_class",
         "description": "Crea una clase nueva y vacia en el diagrama. Usar cuando el usuario pide crear/agregar una clase.",
@@ -450,4 +473,16 @@ TOOLS: list[dict[str, Any]] = [
             "required": ["from_class", "to_class"],
         },
     },
+]
+
+# Formato que espera el SDK de Gemini (google-genai): function schema con
+# "parameters" en vez de "input_schema", y "type": "function" explicito.
+TOOLS: list[dict[str, Any]] = [
+    {
+        "type": "function",
+        "name": t["name"],
+        "description": t["description"],
+        "parameters": t["input_schema"],
+    }
+    for t in _RAW_TOOLS
 ]

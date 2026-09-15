@@ -1,4 +1,5 @@
 # backend/app/main.py
+import asyncio
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import ALLOWED_ORIGINS, settings
@@ -7,8 +8,17 @@ from app.routers import diagramas, classes, atributos, metodo, relacion, realtim
 from app.routers import classes as classes_router
 from app.routers import export
 from app.routers import ai
+from app.ws_manager import ws_manager
 app = FastAPI(title="UML AI Tool API")
 print("🚀 ALLOWED_ORIGINS:", ALLOWED_ORIGINS)
+
+
+@app.on_event("startup")
+async def _capture_main_loop():
+    # Necesario para que las notificaciones realtime disparadas desde
+    # endpoints sincronos (ej. el asistente de IA) puedan programarse en
+    # el loop correcto via run_coroutine_threadsafe.
+    ws_manager.main_loop = asyncio.get_running_loop()
 cors_origins = ["*"] if settings.DEBUG else ALLOWED_ORIGINS
 app.add_middleware(
     CORSMiddleware,
