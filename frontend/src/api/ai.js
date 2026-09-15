@@ -7,8 +7,11 @@ import api from "./client";
  * asi que esta funcion no necesita devolver el diagrama actualizado.
  */
 export const sendAiCommand = (diagramId, text) => {
+  // Un comando de IA puede implicar varias vueltas de ida y vuelta con el
+  // modelo (tool calls + confirmacion final), asi que el timeout global de
+  // axios (10s, pensado para CRUD simple) no alcanza. Le damos mas margen.
   return api
-    .post(`/diagrams/${diagramId}/ai/command`, { text })
+    .post(`/diagrams/${diagramId}/ai/command`, { text }, { timeout: 45000 })
     .then((r) => r.data)
     .catch((err) => {
       console.error("❌ [sendAiCommand] error:", err?.response?.data || err);
