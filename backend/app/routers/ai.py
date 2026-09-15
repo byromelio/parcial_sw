@@ -1,6 +1,7 @@
 # app/routers/ai.py
 import logging
 
+import anthropic
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from uuid import UUID
@@ -31,5 +32,23 @@ def ai_command(
         result = run_command(db, diagram, body.text)
     except RuntimeError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except anthropic.AuthenticationError:
+        raise HTTPException(status_code=502, detail="La API key de Anthropic configurada no es válida.")
+    except anthropic.PermissionDeniedError:
+        raise HTTPException(status_code=502, detail="La API key de Anthropic no tiene permiso para este modelo.")
+    except anthropic.RateLimitError:
+        raise HTTPException(status_code=429, detail="Se alcanzó el límite de uso de la API de Anthropic. Reintentá en unos segundos.")
+    except anthropic.BadRequestError as e:
+        msg = getattr(e, "message", None) or str(e)
+        if "credit balance" in msg.lower():
+            raise HTTPException(
+                status_code=402,
+                detail="La cuenta de Anthropic no tiene crédito suficiente. Cargá crédito en console.anthropic.com → Plans & Billing.",
+            )
+        raise HTTPException(status_code=502, detail=f"Anthropic rechazó la solicitud: {msg}")
+    except anthropic.APIConnectionError:
+        raise HTTPException(status_code=502, detail="No se pudo conectar con la API de Anthropic. Revisá tu conexión a internet.")
+    except anthropic.APIStatusError as e:
+        raise HTTPException(status_code=502, detail=f"Error de la API de Anthropic: {e.message}")
 
     return AiCommandOut(reply=result.reply, actions=result.actions)
