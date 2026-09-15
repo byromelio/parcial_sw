@@ -1,21 +1,18 @@
 // src/components/panels/Inspector.jsx
 //
 // Panel derecho: edición de la clase seleccionada (nombre, atributos y
-// métodos). La lógica de guardado no cambió; lo que se rehízo es la
-// presentación, para que quede claro qué es cada campo y qué efecto tiene
-// sobre el backend que se genera después.
+// métodos).
+//
+// No hay botón "Guardar": cada campo se guarda solo, con un pequeño retraso
+// para no disparar una petición por tecla, y muestra el estado del guardado.
+// Si el servidor rechaza el cambio (por ejemplo un nombre repetido dentro de
+// la clase) el error se muestra en la fila correspondiente, en vez de
+// descartarse en silencio como pasaba antes.
 
 import { useEffect, useRef, useState } from "react";
 import { updateClass } from "../../api/classes";
+import useAutoSave from "../../hooks/useAutoSave";
 import Icon from "../common/Icon";
-
-function useDebouncedCallback(cb, delay = 600) {
-  const t = useRef(null);
-  return (...args) => {
-    if (t.current) clearTimeout(t.current);
-    t.current = setTimeout(() => cb(...args), delay);
-  };
-}
 
 const TYPE_OPTIONS = [
   { v: "string", label: "Texto (string)" },
@@ -29,6 +26,162 @@ const TYPE_OPTIONS = [
   { v: "uuid", label: "Identificador (uuid)" },
   { v: "email", label: "Correo (email)" },
 ];
+
+/** Indicador chico de estado de guardado. */
+function SaveStatus({ status }) {
+  if (status === "saving") {
+    return (
+      <span className="text-subtle" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}>
+        <Icon name="loader" size={11} className="spinning" />
+        Guardando
+      </span>
+    );
+  }
+  if (status === "saved") {
+    return (
+      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--success)" }}>
+        <Icon name="check" size={11} />
+        Guardado
+      </span>
+    );
+  }
+  return null;
+}
+
+function RowError({ message }) {
+  if (!message) return null;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--danger)" }}>
+      <Icon name="warning" size={12} />
+      {message}
+    </div>
+  );
+}
+
+/** Caja de un atributo: nombre, tipo y obligatoriedad. */
+function AttributeRow({ attr, onPatch, onRemove }) {
+  const serverName = attr.name ?? attr.nombre ?? "";
+  const [name, setName] = useState(serverName);
+  const inputRef = useRef(null);
+  const { save, status, error } = useAutoSave();
+
+  // Sincroniza si el valor cambió en el servidor (otro usuario, o el
+  // asistente de IA) mientras no lo estamos editando nosotros.
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setName(serverName);
+  }, [serverName]);
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "var(--sp-2)",
+        padding: "var(--sp-3)",
+        border: `1px solid ${error ? "var(--danger)" : "var(--border)"}`,
+        borderRadius: "var(--radius)",
+        background: "var(--surface-2)",
+      }}
+    >
+      <div style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center" }}>
+        <input
+          ref={inputRef}
+          className="input input-sm"
+          value={name}
+          onChange={(e) => {
+            const val = e.target.value;
+            setName(val);
+            save(() => onPatch({ name: val }));
+          }}
+          placeholder="Nombre del atributo"
+        />
+        <SaveStatus status={status} />
+        <button className="btn btn-danger-ghost btn-icon btn-sm" onClick={onRemove} title="Eliminar atributo">
+          <Icon name="trash" size={14} />
+        </button>
+      </div>
+
+      <select
+        className="select input-sm"
+        value={attr.type ?? attr.tipo ?? "string"}
+        onChange={(e) => save(() => onPatch({ type: e.target.value }))}
+      >
+        {TYPE_OPTIONS.map((o) => (
+          <option key={o.v} value={o.v}>{o.label}</option>
+        ))}
+      </select>
+
+      <label
+        style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: 12, cursor: "pointer" }}
+        title="Si está marcado, el campo será obligatorio (NOT NULL) en la base de datos"
+      >
+        <input
+          type="checkbox"
+          checked={!!attr.required}
+          onChange={(e) => save(() => onPatch({ required: e.target.checked }))}
+        />
+        <span className="text-muted">Obligatorio (NOT NULL)</span>
+      </label>
+
+      <RowError message={error} />
+    </div>
+  );
+}
+
+/** Caja de un método: nombre y tipo de retorno. */
+function MethodRow({ meth, onPatch, onRemove }) {
+  const serverName = meth.name ?? meth.nombre ?? "";
+  const [name, setName] = useState(serverName);
+  const inputRef = useRef(null);
+  const { save, status, error } = useAutoSave();
+
+  useEffect(() => {
+    if (document.activeElement !== inputRef.current) setName(serverName);
+  }, [serverName]);
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: "var(--sp-2)",
+        padding: "var(--sp-3)",
+        border: `1px solid ${error ? "var(--danger)" : "var(--border)"}`,
+        borderRadius: "var(--radius)",
+        background: "var(--surface-2)",
+      }}
+    >
+      <div style={{ display: "flex", gap: "var(--sp-2)", alignItems: "center" }}>
+        <input
+          ref={inputRef}
+          className="input input-sm"
+          value={name}
+          onChange={(e) => {
+            const val = e.target.value;
+            setName(val);
+            save(() => onPatch({ name: val }));
+          }}
+          placeholder="Nombre del método"
+        />
+        <SaveStatus status={status} />
+        <button className="btn btn-danger-ghost btn-icon btn-sm" onClick={onRemove} title="Eliminar método">
+          <Icon name="trash" size={14} />
+        </button>
+      </div>
+
+      <select
+        className="select input-sm"
+        value={meth.return_type ?? "void"}
+        onChange={(e) => save(() => onPatch({ return_type: e.target.value }))}
+      >
+        <option value="void">Sin retorno (void)</option>
+        {TYPE_OPTIONS.filter((o) => o.v !== "uuid").map((o) => (
+          <option key={o.v} value={o.v}>{o.label}</option>
+        ))}
+      </select>
+
+      <RowError message={error} />
+    </div>
+  );
+}
 
 export default function Inspector({
   selected,
@@ -44,33 +197,14 @@ export default function Inspector({
   onRemoveMeth,
 }) {
   const [name, setName] = useState("");
-  const [msg, setMsg] = useState("");
-  const [savingName, setSavingName] = useState(false);
+  const [addError, setAddError] = useState("");
+  const nameRef = useRef(null);
+  const { save: saveName, status: nameStatus, error: nameError } = useAutoSave();
 
   useEffect(() => {
-    setMsg("");
-    setSavingName(false);
-    setName(selected ? selected.name : "");
+    setAddError("");
+    if (document.activeElement !== nameRef.current) setName(selected ? selected.name : "");
   }, [selected?.id, selected?.name]);
-
-  const debouncedSaveName = useDebouncedCallback(async (val) => {
-    if (!selected?.id) return;
-    try {
-      setSavingName(true);
-      const updated = await updateClass(selected.id, { name: val });
-      setName(updated.name);
-    } catch (e) {
-      setMsg(e?.response?.data?.detail || "No se pudo guardar el nombre");
-    } finally {
-      setSavingName(false);
-    }
-  }, 600);
-
-  function onChangeName(val) {
-    setName(val);
-    debouncedSaveName(val);
-    onRename?.(val);
-  }
 
   const asideStyle = {
     width: "var(--inspector-w)",
@@ -96,13 +230,8 @@ export default function Inspector({
         >
           <div
             style={{
-              width: 44,
-              height: 44,
-              display: "grid",
-              placeItems: "center",
-              borderRadius: "var(--radius)",
-              background: "var(--surface-2)",
-              color: "var(--text-subtle)",
+              width: 44, height: 44, display: "grid", placeItems: "center",
+              borderRadius: "var(--radius)", background: "var(--surface-2)", color: "var(--text-subtle)",
             }}
           >
             <Icon name="cursor" size={20} />
@@ -115,6 +244,15 @@ export default function Inspector({
       </aside>
     );
   }
+
+  const runAdd = async (fn) => {
+    setAddError("");
+    try {
+      await fn();
+    } catch (e) {
+      setAddError(e?.response?.data?.detail || "No se pudo agregar");
+    }
+  };
 
   return (
     <aside style={asideStyle}>
@@ -130,11 +268,7 @@ export default function Inspector({
       >
         <Icon name="class" size={15} style={{ color: "var(--accent)" }} />
         <strong style={{ fontSize: 13, flex: 1 }}>Clase</strong>
-        <button
-          className="btn btn-danger-ghost btn-sm"
-          onClick={onDeleteClass}
-          title="Eliminar esta clase del diagrama"
-        >
+        <button className="btn btn-danger-ghost btn-sm" onClick={onDeleteClass} title="Eliminar esta clase del diagrama">
           <Icon name="trash" size={14} />
           Eliminar
         </button>
@@ -143,29 +277,25 @@ export default function Inspector({
       <div className="scroll" style={{ flex: 1, padding: "var(--sp-4)", display: "grid", gap: "var(--sp-5)", alignContent: "start" }}>
         {/* ---------- Nombre ---------- */}
         <div className="field">
-          <label className="label">Nombre de la clase</label>
-          <div style={{ position: "relative" }}>
-            <input
-              className="input"
-              value={name}
-              onChange={(e) => onChangeName(e.target.value)}
-              placeholder="Ej: Cliente"
-            />
-            {savingName && (
-              <span
-                className="text-subtle"
-                style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", fontSize: 11 }}
-              >
-                guardando…
-              </span>
-            )}
+          <div style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+            <label className="label" style={{ flex: 1 }}>Nombre de la clase</label>
+            <SaveStatus status={nameStatus} />
           </div>
-          {msg && (
-            <div style={{ fontSize: 12, color: "var(--danger)", display: "flex", gap: 6, alignItems: "center" }}>
-              <Icon name="warning" size={13} />
-              {msg}
-            </div>
-          )}
+          <input
+            ref={nameRef}
+            className="input"
+            value={name}
+            onChange={(e) => {
+              const val = e.target.value;
+              setName(val);
+              saveName(async () => {
+                const updated = await updateClass(selected.id, { name: val });
+                onRename?.(updated.name);
+              });
+            }}
+            placeholder="Ej: Cliente"
+          />
+          <RowError message={nameError} />
         </div>
 
         {/* ---------- Atributos ---------- */}
@@ -183,16 +313,16 @@ export default function Inspector({
             >
               <Icon name="refresh" size={14} />
             </button>
-            <button className="btn btn-sm" onClick={() => onAddAttr(selected.id)} disabled={!details}>
+            <button className="btn btn-sm" onClick={() => runAdd(() => onAddAttr(selected.id))} disabled={!details}>
               <Icon name="plus" size={14} />
               Agregar
             </button>
           </div>
 
+          <RowError message={addError} />
+
           {!details ? (
-            <div className="text-muted" style={{ fontSize: 12 }}>
-              Cargando…
-            </div>
+            <div className="text-muted" style={{ fontSize: 12 }}>Cargando…</div>
           ) : details.attrs.length === 0 ? (
             <div className="text-subtle" style={{ fontSize: 12 }}>
               Esta clase no tiene atributos. Cada atributo se convierte en una columna de la
@@ -201,55 +331,12 @@ export default function Inspector({
           ) : (
             <div style={{ display: "grid", gap: "var(--sp-3)" }}>
               {details.attrs.map((a) => (
-                <div
+                <AttributeRow
                   key={a.id}
-                  style={{
-                    display: "grid",
-                    gap: "var(--sp-2)",
-                    padding: "var(--sp-3)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    background: "var(--surface-2)",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "var(--sp-2)" }}>
-                    <input
-                      className="input input-sm"
-                      value={a.name ?? a.nombre ?? ""}
-                      onChange={(e) => onPatchAttr(selected.id, a.id, { name: e.target.value })}
-                      placeholder="Nombre del atributo"
-                    />
-                    <button
-                      className="btn btn-danger-ghost btn-icon btn-sm"
-                      onClick={() => onRemoveAttr(selected.id, a.id)}
-                      title="Eliminar atributo"
-                    >
-                      <Icon name="trash" size={14} />
-                    </button>
-                  </div>
-                  <select
-                    className="select input-sm"
-                    value={a.type ?? a.tipo ?? "string"}
-                    onChange={(e) => onPatchAttr(selected.id, a.id, { type: e.target.value })}
-                  >
-                    {TYPE_OPTIONS.map((o) => (
-                      <option key={o.v} value={o.v}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                  <label
-                    style={{ display: "flex", alignItems: "center", gap: "var(--sp-2)", fontSize: 12, cursor: "pointer" }}
-                    title="Si está marcado, el campo será obligatorio (NOT NULL) en la base de datos"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!a.required}
-                      onChange={(e) => onPatchAttr(selected.id, a.id, { required: e.target.checked })}
-                    />
-                    <span className="text-muted">Obligatorio (NOT NULL)</span>
-                  </label>
-                </div>
+                  attr={a}
+                  onPatch={(patch) => onPatchAttr(selected.id, a.id, patch)}
+                  onRemove={() => onRemoveAttr(selected.id, a.id)}
+                />
               ))}
             </div>
           )}
@@ -262,16 +349,14 @@ export default function Inspector({
               <Icon name="method" size={13} />
               Métodos
             </h4>
-            <button className="btn btn-sm" onClick={() => onAddMeth(selected.id)} disabled={!details}>
+            <button className="btn btn-sm" onClick={() => runAdd(() => onAddMeth(selected.id))} disabled={!details}>
               <Icon name="plus" size={14} />
               Agregar
             </button>
           </div>
 
           {!details ? (
-            <div className="text-muted" style={{ fontSize: 12 }}>
-              Cargando…
-            </div>
+            <div className="text-muted" style={{ fontSize: 12 }}>Cargando…</div>
           ) : details.meths.length === 0 ? (
             <div className="text-subtle" style={{ fontSize: 12 }}>
               Sin métodos. Son opcionales: no afectan a las tablas generadas.
@@ -279,49 +364,32 @@ export default function Inspector({
           ) : (
             <div style={{ display: "grid", gap: "var(--sp-3)" }}>
               {details.meths.map((m) => (
-                <div
+                <MethodRow
                   key={m.id}
-                  style={{
-                    display: "grid",
-                    gap: "var(--sp-2)",
-                    padding: "var(--sp-3)",
-                    border: "1px solid var(--border)",
-                    borderRadius: "var(--radius)",
-                    background: "var(--surface-2)",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: "var(--sp-2)" }}>
-                    <input
-                      className="input input-sm"
-                      value={m.name ?? ""}
-                      onChange={(e) => onPatchMeth(selected.id, m.id, { name: e.target.value })}
-                      placeholder="Nombre del método"
-                    />
-                    <button
-                      className="btn btn-danger-ghost btn-icon btn-sm"
-                      onClick={() => onRemoveMeth(selected.id, m.id)}
-                      title="Eliminar método"
-                    >
-                      <Icon name="trash" size={14} />
-                    </button>
-                  </div>
-                  <select
-                    className="select input-sm"
-                    value={m.return_type ?? "void"}
-                    onChange={(e) => onPatchMeth(selected.id, m.id, { return_type: e.target.value })}
-                  >
-                    <option value="void">Sin retorno (void)</option>
-                    {TYPE_OPTIONS.filter((o) => o.v !== "uuid").map((o) => (
-                      <option key={o.v} value={o.v}>
-                        {o.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                  meth={m}
+                  onPatch={(patch) => onPatchMeth(selected.id, m.id, patch)}
+                  onRemove={() => onRemoveMeth(selected.id, m.id)}
+                />
               ))}
             </div>
           )}
         </div>
+      </div>
+
+      {/* ---------- Aclaración de guardado ---------- */}
+      <div
+        className="text-subtle"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "var(--sp-2)",
+          padding: "var(--sp-3) var(--sp-4)",
+          borderTop: "1px solid var(--border)",
+          fontSize: 11,
+        }}
+      >
+        <Icon name="check" size={13} />
+        Los cambios se guardan solos. No hace falta apretar ningún botón.
       </div>
     </aside>
   );

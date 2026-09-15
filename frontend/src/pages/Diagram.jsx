@@ -8,6 +8,7 @@ import { hitTestClasses, inferClosestSide } from "../components/canvas/utils/geo
 
 // ===== estado global (auth) =====
 import useAuth from "../store/auth";
+import useUndo from "../store/undo";
 
 // ===== hooks personalizados (lógica de negocio) =====
 import useTheme from "../hooks/useTheme";
@@ -45,6 +46,11 @@ export default function DiagramDashboard() {
   const [linking, setLinking] = useState(null);
   const [camera, setCamera] = useState({ x: 0, y: 0, z: 1 });
   const [showHelp, setShowHelp] = useState(false);
+  const [aviso, setAviso] = useState(null); // mensaje flotante de "deshecho"
+
+  const undoLast = useUndo((s) => s.undoLast);
+  const undoCount = useUndo((s) => s.stack.length);
+  const clearUndo = useUndo((s) => s.clear);
 
   const { exportDiagram, loading: exporting } = useExportDiagram();
 
@@ -78,6 +84,50 @@ export default function DiagramDashboard() {
     localStorage.setItem(HELP_SEEN_KEY, "1");
     setShowHelp(false);
   };
+
+  // La pila de deshacer es por diagrama: al salir no debe quedar nada que
+  // pueda revertir cambios de otro diagrama.
+  useEffect(() => clearUndo, [id, clearUndo]);
+
+  // =====================================================
+  // Deshacer (Ctrl+Z)
+  // =====================================================
+  const deshacer = async () => {
+    const label = await undoLast();
+    if (!label) {
+      setAviso({ tipo: "vacio", texto: "No hay nada para deshacer" });
+      return;
+    }
+    setAviso({ tipo: "ok", texto: `Se deshizo: ${label}` });
+  };
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (!ctrl || e.key.toLowerCase() !== "z" || e.shiftKey) return;
+
+      // Si el foco está en un campo de texto, dejamos que el navegador
+      // deshaga lo que se escribió ahí en vez de revertir el diagrama.
+      const el = document.activeElement;
+      const escribiendo =
+        el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      if (escribiendo) return;
+
+      e.preventDefault();
+      deshacer();
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // El aviso se va solo
+  useEffect(() => {
+    if (!aviso) return;
+    const t = setTimeout(() => setAviso(null), 2600);
+    return () => clearTimeout(t);
+  }, [aviso]);
 
   // =====================================================
   // Crear relación arrastrando entre clases
@@ -196,6 +246,8 @@ export default function DiagramDashboard() {
         onExport={() => exportDiagram(diagram.id)}
         exporting={exporting}
         onOpenHelp={() => setShowHelp(true)}
+        onUndo={deshacer}
+        canUndo={undoCount > 0}
       />
 
       <div style={{ display: "flex", minHeight: 0 }}>
@@ -322,6 +374,35 @@ export default function DiagramDashboard() {
             camera={camera}
             onSelectRelation={(rid) => { setSelectedRelId(rid); setSelectedId(null); }}
           />
+
+          {/* Aviso de deshacer */}
+          {aviso && (
+            <div
+              style={{
+                position: "absolute",
+                bottom: "var(--sp-4)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                zIndex: 25,
+                display: "flex",
+                alignItems: "center",
+                gap: "var(--sp-2)",
+                padding: "var(--sp-2) var(--sp-4)",
+                borderRadius: 999,
+                background: "var(--surface-3)",
+                border: "1px solid var(--border-strong)",
+                boxShadow: "var(--shadow)",
+                fontSize: 12,
+              }}
+            >
+              <Icon
+                name={aviso.tipo === "ok" ? "check" : "info"}
+                size={14}
+                style={{ color: aviso.tipo === "ok" ? "var(--success)" : "var(--text-subtle)" }}
+              />
+              {aviso.texto}
+            </div>
+          )}
 
           <AiAssistantPanel diagramId={diagram.id} />
         </main>

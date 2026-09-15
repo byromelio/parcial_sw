@@ -9,11 +9,13 @@ import {
   deleteRelation as apiDeleteRelation,
 } from "../api/relations";
 import { onEvent } from "../api/realtime";
+import useUndo from "../store/undo";
 
 export default function useRelations(diagram) {
   const [relations, setRelations] = useState([]);
   const [selectedRelId, setSelectedRelId] = useState(null);
   const [selectedRelation, setSelectedRelation] = useState(null); // 👈 ya no usamos solo find()
+  const pushUndo = useUndo((s) => s.push);
 
   // ====== CARGA INICIAL ======
   async function loadRelations() {
@@ -53,7 +55,12 @@ export default function useRelations(diagram) {
 
   // ====== CRUD ======
   async function createRelation(body) {
-    return await apiCreateRelation(diagram.id, body);
+    const creada = await apiCreateRelation(diagram.id, body);
+    pushUndo(`crear la relación ${creada.origen_nombre} → ${creada.destino_nombre}`, async () => {
+      await apiDeleteRelation(creada.id);
+      setRelations((prev) => prev.filter((r) => r.id !== creada.id));
+    });
+    return creada;
   }
 
   async function updateRelation(relationId, patch) {
@@ -62,7 +69,31 @@ export default function useRelations(diagram) {
 
   async function deleteRelation(relationId) {
     if (!confirm("¿Eliminar esta relación?")) return;
-    return await apiDeleteRelation(relationId);
+    const previa = relations.find((r) => r.id === relationId);
+    const res = await apiDeleteRelation(relationId);
+
+    if (previa) {
+      pushUndo(`eliminar la relación ${previa.origen_nombre} → ${previa.destino_nombre}`, async () => {
+        await apiCreateRelation(diagram.id, {
+          from_class: previa.from_class,
+          to_class: previa.to_class,
+          type: previa.type,
+          label: previa.label,
+          src_anchor: previa.src_anchor,
+          dst_anchor: previa.dst_anchor,
+          src_offset: previa.src_offset,
+          dst_offset: previa.dst_offset,
+          src_lane: previa.src_lane,
+          dst_lane: previa.dst_lane,
+          src_mult_min: previa.src_mult_min,
+          src_mult_max: previa.src_mult_max,
+          dst_mult_min: previa.dst_mult_min,
+          dst_mult_max: previa.dst_mult_max,
+        });
+        await loadRelations();
+      });
+    }
+    return res;
   }
 
   // ====== EVENTOS EN TIEMPO REAL ======

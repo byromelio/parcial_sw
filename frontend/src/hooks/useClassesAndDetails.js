@@ -19,6 +19,16 @@ import {
 } from "../api/classes";
 import useDebouncedCallback from "./useDebouncedCallback";
 import { connect, disconnect, onEvent as subscribe } from "../api/realtime";
+import useUndo from "../store/undo";
+
+/** Devuelve "campo", "campo2", "campo3"… evitando los nombres ya usados. */
+function nextFreeName(base, taken) {
+  const usados = taken.map((t) => String(t).toLowerCase());
+  if (!usados.includes(base)) return base;
+  let i = 2;
+  while (usados.includes(`${base}${i}`)) i++;
+  return `${base}${i}`;
+}
 
 export default function useClassesAndDetails(diagram) {
   // 🔹 Lista de clases
@@ -34,6 +44,9 @@ export default function useClassesAndDetails(diagram) {
   // 🔹 Estados de inserción
   const [insertMode, setInsertMode] = useState(false);
   const [insertName, setInsertName] = useState("NuevaClase");
+
+  // 🔹 Registro de acciones reversibles (Ctrl+Z)
+  const pushUndo = useUndo((s) => s.push);
 
   // ====== CARGA DE DETALLES ======
   const fetchDetails = async (classId) => {
@@ -391,6 +404,12 @@ export default function useClassesAndDetails(diagram) {
       await loadClasses();
       setSelectedId(c.id);
       replaceDetails(c.id, { attrs: [], meths: [] });
+
+      pushUndo(`crear la clase ${c.name ?? c.nombre}`, async () => {
+        await apiDeleteClass(c.id);
+        setClasses((prev) => prev.filter((x) => x.id !== c.id));
+        setSelectedId((cur) => (cur === c.id ? null : cur));
+      });
     } catch (e) {
       alert(e?.response?.data?.detail || "No se pudo crear la clase");
     } finally {
@@ -415,18 +434,38 @@ export default function useClassesAndDetails(diagram) {
 
   // ====== DRAG/RESIZE ======
   async function handleDragEnd(classId, { x_grid, y_grid }) {
+    const antes = classes.find((c) => c.id === classId);
     try {
       await updateClassPosition(classId, { x_grid, y_grid });
       setClasses((prev) => prev.map((c) => (c.id === classId ? { ...c, x_grid, y_grid } : c)));
+
+      if (antes && (antes.x_grid !== x_grid || antes.y_grid !== y_grid)) {
+        const origen = { x_grid: antes.x_grid, y_grid: antes.y_grid };
+        pushUndo(`mover ${antes.name ?? antes.nombre}`, async () => {
+          await updateClassPosition(classId, origen);
+          setClasses((prev) => prev.map((c) => (c.id === classId ? { ...c, ...origen } : c)));
+        });
+      }
     } catch {
       await loadClasses();
     }
   }
 
-  async function handleResizeEnd(classId, { w_grid, h_grid }) {
+  // `undoable` es false cuando la tarjeta se reajusta sola al cambiar su
+  // contenido (ver useAutoGrow): eso no es una acción del usuario.
+  async function handleResizeEnd(classId, { w_grid, h_grid }, { undoable = true } = {}) {
+    const antes = classes.find((c) => c.id === classId);
     try {
       await updateClassSize(classId, { w_grid, h_grid });
       setClasses((prev) => prev.map((c) => (c.id === classId ? { ...c, w_grid, h_grid } : c)));
+
+      if (undoable && antes && (antes.w_grid !== w_grid || antes.h_grid !== h_grid)) {
+        const origen = { w_grid: antes.w_grid, h_grid: antes.h_grid };
+        pushUndo(`redimensionar ${antes.name ?? antes.nombre}`, async () => {
+          await updateClassSize(classId, origen);
+          setClasses((prev) => prev.map((c) => (c.id === classId ? { ...c, ...origen } : c)));
+        });
+      }
     } catch {
       await loadClasses();
     }
@@ -435,6 +474,9 @@ export default function useClassesAndDetails(diagram) {
   // ====== ELIMINAR CLASE ======
   async function handleDelete(classId) {
     if (!confirm("¿Eliminar esta clase?")) return;
+    const clase = classes.find((c) => c.id === classId);
+    const detalles = detailsByClass[classId];
+
     try {
       await apiDeleteClass(classId);
       setClasses((prev) => prev.filter((c) => c.id !== classId));
@@ -444,6 +486,35 @@ export default function useClassesAndDetails(diagram) {
         return n;
       });
       if (selectedId === classId) setSelectedId(null);
+
+      if (clase) {
+        // Al deshacer se recrea la clase con sus atributos y métodos. Las
+        // relaciones que la tocaban no se recuperan: el backend las borra en
+        // cascada y la clase vuelve con otro id.
+        pushUndo(`eliminar la clase ${clase.name ?? clase.nombre}`, async () => {
+          const recreada = await apiCreateClass(diagram.id, {
+            name: clase.name ?? clase.nombre,
+            x_grid: clase.x_grid, y_grid: clase.y_grid,
+            w_grid: clase.w_grid, h_grid: clase.h_grid,
+            z_index: clase.z_index,
+          });
+          for (const a of detalles?.attrs || []) {
+            await createAttribute(recreada.id, {
+              name: a.name ?? a.nombre,
+              type: a.type ?? a.tipo ?? "string",
+              required: !!a.required,
+            });
+          }
+          for (const m of detalles?.meths || []) {
+            await createMethod(recreada.id, {
+              name: m.name ?? m.nombre,
+              return_type: m.return_type ?? "void",
+            });
+          }
+          await loadClasses();
+          await fetchDetails(recreada.id);
+        });
+      }
     } catch (e) {
       alert(e?.response?.data?.detail || "No se pudo eliminar");
     }
@@ -467,8 +538,21 @@ export default function useClassesAndDetails(diagram) {
 
     // 🔹 atributos
     addAttr: async (classId) => {
-      const created = await createAttribute(classId, { name: "campo", type: "string", required: false });
-      replaceDetails(classId, { attrs: [created, ...(detailsByClass[classId]?.attrs || [])] });
+      // El nombre por defecto tiene que ser único dentro de la clase: los
+      // nombres repetidos están prohibidos a nivel de base de datos, así que
+      // usar siempre "campo" hacía fallar el segundo que agregabas.
+      const usados = (detailsByClass[classId]?.attrs || []).map((a) => a.name ?? a.nombre ?? "");
+      const created = await createAttribute(classId, {
+        name: nextFreeName("campo", usados),
+        type: "string",
+        required: false,
+      });
+      replaceDetails(classId, { attrs: [...(detailsByClass[classId]?.attrs || []), created] });
+
+      pushUndo(`agregar el atributo ${created.name}`, async () => {
+        await deleteAttribute(created.id);
+        await fetchDetails(classId);
+      });
       return created;
     },
     patchAttr: async (classId, attrId, patch) => {
@@ -478,15 +562,36 @@ export default function useClassesAndDetails(diagram) {
       return updated;
     },
     removeAttr: async (classId, attrId) => {
+      const previo = (detailsByClass[classId]?.attrs || []).find((a) => a.id === attrId);
       await deleteAttribute(attrId);
       const next = (detailsByClass[classId]?.attrs || []).filter((a) => a.id !== attrId);
       replaceDetails(classId, { attrs: next });
+
+      if (previo) {
+        pushUndo(`eliminar el atributo ${previo.name ?? previo.nombre}`, async () => {
+          await createAttribute(classId, {
+            name: previo.name ?? previo.nombre,
+            type: previo.type ?? previo.tipo ?? "string",
+            required: !!previo.required,
+          });
+          await fetchDetails(classId);
+        });
+      }
     },
 
     // 🔹 métodos
     addMeth: async (classId) => {
-      const created = await createMethod(classId, { name: "operacion", return_type: "void" });
-      replaceDetails(classId, { meths: [created, ...(detailsByClass[classId]?.meths || [])] });
+      const usados = (detailsByClass[classId]?.meths || []).map((m) => m.name ?? m.nombre ?? "");
+      const created = await createMethod(classId, {
+        name: nextFreeName("operacion", usados),
+        return_type: "void",
+      });
+      replaceDetails(classId, { meths: [...(detailsByClass[classId]?.meths || []), created] });
+
+      pushUndo(`agregar el método ${created.name}`, async () => {
+        await deleteMethod(created.id);
+        await fetchDetails(classId);
+      });
       return created;
     },
     patchMeth: async (classId, methId, patch) => {
@@ -496,9 +601,20 @@ export default function useClassesAndDetails(diagram) {
       return updated;
     },
     removeMeth: async (classId, methId) => {
+      const previo = (detailsByClass[classId]?.meths || []).find((m) => m.id === methId);
       await deleteMethod(methId);
       const next = (detailsByClass[classId]?.meths || []).filter((m) => m.id !== methId);
       replaceDetails(classId, { meths: next });
+
+      if (previo) {
+        pushUndo(`eliminar el método ${previo.name ?? previo.nombre}`, async () => {
+          await createMethod(classId, {
+            name: previo.name ?? previo.nombre,
+            return_type: previo.return_type ?? "void",
+          });
+          await fetchDetails(classId);
+        });
+      }
     },
   };
 }

@@ -18,7 +18,10 @@ export default function useAutoGrow({
   const persistResizeDebounced = useCallback((newH) => {
     if (debouncedPersistRef.current) clearTimeout(debouncedPersistRef.current);
     debouncedPersistRef.current = setTimeout(() => {
-      onResizeEnd?.(clsId, { w_grid: size.w, h_grid: newH });
+      // `undoable: false` porque este alto lo calcula la tarjeta sola cuando
+      // le cambia el contenido: el usuario no lo pidió, y apilarlo haría que
+      // su primer Ctrl+Z deshaga un redimensionado que nunca hizo.
+      onResizeEnd?.(clsId, { w_grid: size.w, h_grid: newH }, { undoable: false });
     }, 250);
   }, [onResizeEnd, clsId, size.w]);
 

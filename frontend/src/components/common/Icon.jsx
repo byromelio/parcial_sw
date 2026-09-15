@@ -26,6 +26,12 @@ const PATHS = {
       <path d="M7 10l5 5 5-5M12 15V3" />
     </>
   ),
+  undo: (
+    <>
+      <path d="M3 7v6h6" />
+      <path d="M3.5 13a9 9 0 1 0 2.1-9.4L3 7" />
+    </>
+  ),
   refresh: (
     <>
       <path d="M21 2v6h-6" />

@@ -132,6 +132,23 @@ export default function HelpGuide({ onClose }) {
                   sin recargar la página.
                 </div>
               </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "var(--sp-2)",
+                  padding: "var(--sp-3)",
+                  borderRadius: "var(--radius)",
+                  background: "var(--surface-2)",
+                }}
+              >
+                <Icon name="check" size={15} style={{ color: "var(--success)", marginTop: 2 }} />
+                <div className="text-muted" style={{ fontSize: 12 }}>
+                  <strong>No hay botón de guardar</strong>: todo se guarda solo mientras
+                  trabajás. Si te equivocás, usá <strong>Ctrl+Z</strong> (o el botón de deshacer
+                  de la barra) para revertir el último cambio.
+                </div>
+              </div>
             </div>
           ) : (
             <div style={{ display: "grid", gap: "var(--sp-3)" }}>

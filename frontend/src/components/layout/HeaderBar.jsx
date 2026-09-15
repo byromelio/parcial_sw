@@ -22,6 +22,8 @@ export default function HeaderBar({
   onExport,
   exporting,
   onOpenHelp,
+  onUndo,
+  canUndo,
 }) {
   return (
     <header
@@ -64,6 +66,15 @@ export default function HeaderBar({
         >
           <Icon name="plus" />
           Nueva clase
+        </button>
+
+        <button
+          className="btn btn-icon"
+          onClick={onUndo}
+          disabled={!canUndo}
+          title={canUndo ? "Deshacer el último cambio (Ctrl+Z)" : "No hay nada para deshacer"}
+        >
+          <Icon name="undo" />
         </button>
 
         <button
