@@ -25,6 +25,7 @@ import ConnectionLayer from "../components/canvas/ConnectionLayer";
 import Inspector from "../components/panels/Inspector";
 import RelationInspector from "../components/panels/RelationInspector";
 import AiAssistantPanel from "../components/panels/AiAssistantPanel";
+import CollaboratorsModal from "../components/panels/CollaboratorsModal";
 import HelpGuide from "../components/common/HelpGuide";
 import Icon from "../components/common/Icon";
 import { exportXmi, importXmi } from "../api/xmi";
@@ -48,6 +49,7 @@ export default function DiagramDashboard() {
   const [linking, setLinking] = useState(null);
   const [camera, setCamera] = useState({ x: 0, y: 0, z: 1 });
   const [showHelp, setShowHelp] = useState(false);
+  const [showCollaborators, setShowCollaborators] = useState(false);
   const [aviso, setAviso] = useState(null); // mensaje flotante de "deshecho"
 
   const undoLast = useUndo((s) => s.undoLast);
@@ -327,6 +329,7 @@ export default function DiagramDashboard() {
         onOpenHelp={() => setShowHelp(true)}
         onUndo={deshacer}
         canUndo={undoCount > 0}
+        onOpenCollaborators={() => setShowCollaborators(true)}
       />
 
       <div style={{ display: "flex", minHeight: 0 }}>
@@ -524,6 +527,13 @@ export default function DiagramDashboard() {
       </div>
 
       {showHelp && <HelpGuide onClose={closeHelp} />}
+      {showCollaborators && (
+        <CollaboratorsModal
+          diagram={diagram}
+          isOwner={diagram.owner_email === email}
+          onClose={() => setShowCollaborators(false)}
+        />
+      )}
     </div>
   );
 }

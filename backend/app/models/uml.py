@@ -28,8 +28,38 @@ class Diagram(Base):
     updated_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     # Relaciones
+    owner: Mapped["User"] = relationship()
     classes: Mapped[List["Clase"]] = relationship(back_populates="diagram", cascade="all, delete-orphan", passive_deletes=True)
     relations: Mapped[List["Relacion"]] = relationship(back_populates="diagram", cascade="all, delete-orphan", passive_deletes=True)
+    collaborators: Mapped[List["DiagramCollaborator"]] = relationship(back_populates="diagram", cascade="all, delete-orphan", passive_deletes=True)
+
+    @property
+    def owner_email(self) -> str:
+        return self.owner.email
+
+
+# =========================
+# Colaborador de un diagrama
+# =========================
+class CollaboratorRole(str, enum.Enum):
+    EDITOR = "EDITOR"
+    VIEWER = "VIEWER"
+
+
+class DiagramCollaborator(Base):
+    __tablename__ = "diagram_collaborator"
+    __table_args__ = (
+        UniqueConstraint("diagram_id", "user_id", name="uq_diagram_collaborator_diagram_user"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    diagram_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("diagram.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    role: Mapped[CollaboratorRole] = mapped_column(Enum(CollaboratorRole, name="collaborator_role"), nullable=False, server_default="EDITOR")
+    created_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    diagram: Mapped["Diagram"] = relationship(back_populates="collaborators")
+    user: Mapped["User"] = relationship()
 
 
 # =========================

@@ -13,6 +13,8 @@ class DiagramOut(BaseModel):
     id: UUID
     title: str
     updated_at: datetime
+    owner_id: int
+    owner_email: str
 
     model_config = {"from_attributes": True}
 

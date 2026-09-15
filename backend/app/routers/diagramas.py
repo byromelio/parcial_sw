@@ -14,12 +14,13 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.models.uml import Clase, Relacion
+from app.models.uml import Clase, Relacion, DiagramCollaborator, CollaboratorRole
 from app.models.uml import Diagram
 from app.schemas.diagram import DiagramCreate, DiagramOut, DiagramList
+from app.schemas.collaborator import CollaboratorCreate, CollaboratorOut
 from app.schemas.clase_completa import ClaseCompletaOut, ClaseCompletaOutLight,RelacionOutExpanded
- 
-from ._helpers import get_my_diagram
+
+from ._helpers import get_my_diagram, _accessible_diagram_filter
 
 router = APIRouter(prefix="/diagrams", tags=["diagrams"])
 log = logging.getLogger("app.routers.diagramas")
@@ -50,7 +51,7 @@ def list_diagrams(
 
     log.info(f"📥 Listar diagramas -> user_id={me.id}, page={page}, limit={limit}")
 
-    q = db.query(Diagram).filter(Diagram.owner_id == me.id).order_by(Diagram.updated_at.desc())
+    q = db.query(Diagram).filter(_accessible_diagram_filter(me)).order_by(Diagram.updated_at.desc())
     total = q.count()
     items = q.offset((page - 1) * limit).limit(limit).all()
 
@@ -65,7 +66,7 @@ def get_diagram(
     me: User = Depends(get_current_user),
 ):
     log.info(f"🔍 Obtener diagrama -> user_id={me.id}, diagram_id={diagram_id}")
-    d = db.query(Diagram).filter(Diagram.id == diagram_id, Diagram.owner_id == me.id).one_or_none()
+    d = db.query(Diagram).filter(Diagram.id == diagram_id, _accessible_diagram_filter(me)).one_or_none()
     if not d:
         log.warning(f"⚠️ Diagrama no encontrado -> diagram_id={diagram_id}, user_id={me.id}")
         raise HTTPException(404, "Diagrama no encontrado")
@@ -120,3 +121,77 @@ def get_diagram_full(
         "clases": clases_out,
         "relaciones": relaciones_out
     }
+
+
+@router.get("/{diagram_id}/collaborators", response_model=list[CollaboratorOut])
+def list_collaborators(
+    diagram_id: UUID,
+    db: Session = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    d = get_my_diagram(db, me, diagram_id)
+    rows = (
+        db.query(DiagramCollaborator)
+        .filter(DiagramCollaborator.diagram_id == d.id)
+        .all()
+    )
+    return [
+        CollaboratorOut(id=r.id, user_id=r.user_id, email=r.user.email, name=r.user.name, role=r.role)
+        for r in rows
+    ]
+
+
+@router.post("/{diagram_id}/collaborators", response_model=CollaboratorOut, status_code=status.HTTP_201_CREATED)
+def add_collaborator(
+    diagram_id: UUID,
+    body: CollaboratorCreate,
+    db: Session = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    # Solo el dueño decide quién puede entrar al diagrama.
+    d = db.query(Diagram).filter(Diagram.id == diagram_id, Diagram.owner_id == me.id).one_or_none()
+    if not d:
+        raise HTTPException(404, "Diagrama no encontrado")
+
+    target = db.query(User).filter(User.email == body.email).one_or_none()
+    if not target:
+        raise HTTPException(404, "No existe ningún usuario con ese email")
+    if target.id == d.owner_id:
+        raise HTTPException(400, "El dueño ya tiene acceso al diagrama")
+
+    existing = (
+        db.query(DiagramCollaborator)
+        .filter(DiagramCollaborator.diagram_id == d.id, DiagramCollaborator.user_id == target.id)
+        .one_or_none()
+    )
+    if existing:
+        existing.role = body.role
+        db.commit(); db.refresh(existing)
+        return CollaboratorOut(id=existing.id, user_id=target.id, email=target.email, name=target.name, role=existing.role)
+
+    collab = DiagramCollaborator(diagram_id=d.id, user_id=target.id, role=body.role)
+    db.add(collab); db.commit(); db.refresh(collab)
+    return CollaboratorOut(id=collab.id, user_id=target.id, email=target.email, name=target.name, role=collab.role)
+
+
+@router.delete("/{diagram_id}/collaborators/{user_id}", status_code=204)
+def remove_collaborator(
+    diagram_id: UUID,
+    user_id: int,
+    db: Session = Depends(get_db),
+    me: User = Depends(get_current_user),
+):
+    d = db.query(Diagram).filter(Diagram.id == diagram_id, Diagram.owner_id == me.id).one_or_none()
+    if not d:
+        raise HTTPException(404, "Diagrama no encontrado")
+
+    collab = (
+        db.query(DiagramCollaborator)
+        .filter(DiagramCollaborator.diagram_id == d.id, DiagramCollaborator.user_id == user_id)
+        .one_or_none()
+    )
+    if not collab:
+        raise HTTPException(404, "Ese usuario no es colaborador de este diagrama")
+
+    db.delete(collab); db.commit()
+    return

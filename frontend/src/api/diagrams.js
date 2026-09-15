@@ -41,3 +41,18 @@ export async function getDiagram(id) {
 export async function deleteDiagram(id) {
   await api.delete(`/diagrams/${id}`);
 }
+
+// ====== Colaboradores ======
+export async function listCollaborators(diagramId) {
+  const { data } = await api.get(`/diagrams/${diagramId}/collaborators`);
+  return data;
+}
+
+export async function addCollaborator(diagramId, email, role = "EDITOR") {
+  const { data } = await api.post(`/diagrams/${diagramId}/collaborators`, { email, role });
+  return data;
+}
+
+export async function removeCollaborator(diagramId, userId) {
+  await api.delete(`/diagrams/${diagramId}/collaborators/${userId}`);
+}

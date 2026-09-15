@@ -29,6 +29,7 @@ export default function HeaderBar({
   onOpenHelp,
   onUndo,
   canUndo,
+  onOpenCollaborators,
 }) {
   const xmiInputRef = useRef(null);
 
@@ -94,6 +95,16 @@ export default function HeaderBar({
         >
           <Icon name={exporting ? "loader" : "download"} className={exporting ? "spinning" : ""} />
           {exporting ? "Generando…" : "Exportar backend"}
+        </button>
+
+        <div style={{ width: 1, height: 22, background: "var(--border)", alignSelf: "center" }} />
+
+        <button
+          className="btn btn-icon"
+          onClick={onOpenCollaborators}
+          title="Gestionar colaboradores de este diagrama"
+        >
+          <Icon name="users" />
         </button>
 
         <div style={{ width: 1, height: 22, background: "var(--border)", alignSelf: "center" }} />

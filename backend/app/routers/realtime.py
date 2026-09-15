@@ -8,7 +8,7 @@ from jose import JWTError
 
 from app.core.security import decode_token
 from app.db import SessionLocal
-from app.models.uml import Diagram
+from app.models.uml import Diagram, DiagramCollaborator
 from app.models.user import User
 from app.services.locks import lock_manager
 from app.ws_manager import ws_manager
@@ -49,7 +49,11 @@ def _authenticate(token: str | None, diagram_id: str) -> str | None:
             return None
         diagram = (
             db.query(Diagram)
-            .filter(Diagram.id == diag_uuid, Diagram.owner_id == user.id)
+            .filter(
+                Diagram.id == diag_uuid,
+                (Diagram.owner_id == user.id)
+                | Diagram.collaborators.any(DiagramCollaborator.user_id == user.id),
+            )
             .one_or_none()
         )
         if not diagram:
