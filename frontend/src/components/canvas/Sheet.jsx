@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 export const SHEET = { CELL: 16 };
 
-export default function Sheet({ children, onCanvasClick, onCameraChange }) {
+export default function Sheet({ children, onCanvasClick, onCameraChange, onCursorMove, remoteCursors = [] }) {
   const { CELL } = SHEET;
   const ref = useRef(null);
   const [cam, setCam] = useState(() => ({ x: 0, y: 0, z: 1 }));
@@ -85,6 +85,19 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
     onCanvasClick({ x_grid, y_grid });
   }, [onCanvasClick, cam.x, cam.y, cam.z, CELL]);
 
+  // Cursores en vivo (estilo Miro): reporto mi posición en coordenadas del
+  // "mundo" del diagrama, la misma transformación que ya usa handleClick.
+  // No hace falta un listener aparte: cualquier movimiento sobre el
+  // lienzo ya pasa por acá.
+  const handleMouseMoveForCursor = useCallback((e) => {
+    if (!onCursorMove) return;
+    const rect = ref.current?.getBoundingClientRect();
+    if (!rect) return;
+    const localX = e.clientX - rect.left;
+    const localY = e.clientY - rect.top;
+    onCursorMove((localX - cam.x) / cam.z, (localY - cam.y) / cam.z);
+  }, [onCursorMove, cam.x, cam.y, cam.z]);
+
   // Pizarra "infinita": en vez de un rectángulo de tamaño fijo, la grilla es
   // un patrón de fondo que se repite en todo el área visible y se desplaza
   // con la cámara -- así nunca hay un borde real donde el lienzo "se
@@ -95,6 +108,7 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
     <div
       ref={ref}
       onClick={handleClick}
+      onMouseMove={handleMouseMoveForCursor}
       style={{
         position: "relative",
         width: "100%",
@@ -120,6 +134,84 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
         }}
       >
         {children}
+
+        {/* Cursores en vivo de otros colaboradores. Van dentro de este
+            mismo div (ya transformado por cam.x/cam.y/cam.z) para no
+            tener que repetir la conversión mundo->pantalla acá.
+            El z-index de cada ClassCard (cls.z_index) las saca del flujo
+            normal, así que sin este wrapper -- que tiene su PROPIO
+            z-index alto a este mismo nivel -- el cursor quedaba tapado
+            por cualquier tarjeta con z-index explícito, aunque el div del
+            cursor en sí tuviera un z-index más alto (ese z-index solo
+            compite dentro de su propio stacking context). */}
+        <div style={{ position: "absolute", inset: 0, zIndex: 999, pointerEvents: "none" }}>
+          {remoteCursors.map((c) => (
+            <RemoteCursor key={c.conn_id} cursor={c} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Puntero de otro colaborador con su nombre y, si aplica, qué está
+ * haciendo. La transición CSS suaviza el salto entre las posiciones que
+ * llegan cada ~50ms, para que el movimiento se vea fluido y no a los tirones. */
+function RemoteCursor({ cursor }) {
+  const { x, y, name, color, label } = cursor;
+  return (
+    <div
+      style={{
+        position: "absolute",
+        left: x * SHEET.CELL,
+        top: y * SHEET.CELL,
+        pointerEvents: "none",
+        zIndex: 50,
+        transition: "left 80ms linear, top 80ms linear",
+        willChange: "left, top",
+      }}
+    >
+      <svg width="20" height="20" viewBox="0 0 20 20" style={{ display: "block", filter: "drop-shadow(0 1px 2px rgba(0,0,0,.35))" }}>
+        <path d="M2 1 L2 17 L6.5 13.5 L9.5 19 L12 17.5 L9 12 L15 12 Z" fill={color} stroke="var(--surface-1)" strokeWidth="1" />
+      </svg>
+      <div
+        style={{
+          marginTop: 2,
+          marginLeft: 14,
+          display: "inline-flex",
+          flexDirection: "column",
+          gap: 2,
+          whiteSpace: "nowrap",
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#fff",
+            background: color,
+            padding: "2px 6px",
+            borderRadius: 4,
+            boxShadow: "0 1px 3px rgba(0,0,0,.3)",
+          }}
+        >
+          {name}
+        </span>
+        {label && (
+          <span
+            style={{
+              fontSize: 10,
+              color: "var(--text-muted)",
+              background: "var(--surface-2)",
+              border: "1px solid var(--border)",
+              padding: "1px 5px",
+              borderRadius: 4,
+              width: "fit-content",
+            }}
+          >
+            {label}
+          </span>
+        )}
       </div>
     </div>
   );

@@ -102,6 +102,20 @@ export function releaseLock(classId) {
   send({ action: "unlock", class_id: classId });
 }
 
+/**
+ * Avisa dónde está mi cursor, en coordenadas del "mundo" del diagrama (no
+ * de pantalla: cada participante tiene su propio pan/zoom). `label` es
+ * opcional y describe qué estoy haciendo (ej. "editando Cliente").
+ */
+export function sendCursor(x, y, label) {
+  send({ action: "cursor", x, y, label });
+}
+
+/** Avisa que dejé de mover el mouse sobre el lienzo (se fue o cambió de pantalla). */
+export function sendCursorLeft() {
+  send({ action: "cursor_left" });
+}
+
 /** El id de conexión que me asignó el backend (null hasta que llega). */
 export function getConnId() {
   return myConnId;

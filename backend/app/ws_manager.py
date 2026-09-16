@@ -32,12 +32,20 @@ class WSManager:
             if not self.active_connections[diagram_id]:
                 del self.active_connections[diagram_id]
 
-    async def broadcast(self, diagram_id: str, message: dict):
-        """Enviar un mensaje a todos los clientes conectados al diagrama"""
+    async def broadcast(self, diagram_id: str, message: dict, exclude: Optional[WebSocket] = None):
+        """Enviar un mensaje a todos los clientes conectados al diagrama.
+
+        `exclude` sirve para eventos de alta frecuencia como la posicion del
+        cursor: cada cliente ya sabe donde esta su propio mouse, asi que
+        reenviarselo a si mismo es trafico de mas (y en el caso del cursor,
+        haria parpadear el propio puntero con la latencia de ida y vuelta).
+        """
         if diagram_id not in self.active_connections:
             return
         dead_connections = []
         for ws in self.active_connections[diagram_id]:
+            if ws is exclude:
+                continue
             try:
                 await ws.send_json(message)
             except Exception:

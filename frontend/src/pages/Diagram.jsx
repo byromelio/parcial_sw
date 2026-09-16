@@ -17,6 +17,7 @@ import useClassesAndDetails from "../hooks/useClassesAndDetails";
 import useRelations from "../hooks/useRelations";
 import useExportDiagram from "../hooks/useExport";
 import useDiagramLocks from "../hooks/useLocks";
+import useLiveCursors from "../hooks/useLiveCursors";
 
 // ===== componentes de UI =====
 import Sheet from "../components/canvas/Sheet";
@@ -115,6 +116,11 @@ export default function DiagramDashboard() {
     addAttr, patchAttr, removeAttr,
     addMeth, patchMeth, removeMeth,
   } = useClassesAndDetails(diagram);
+
+  // =====================================================
+  // Cursores en vivo de los demás colaboradores (estilo Miro/Figma).
+  // =====================================================
+  const { cursors: remoteCursors, reportCursor } = useLiveCursors(diagram?.id);
 
   // =====================================================
   // Exclusión mutua: al seleccionar una clase se pide su lock; al
@@ -435,7 +441,12 @@ export default function DiagramDashboard() {
             </div>
           )}
 
-          <Sheet onCanvasClick={handleCanvasClick} onCameraChange={setCamera}>
+          <Sheet
+            onCanvasClick={handleCanvasClick}
+            onCameraChange={setCamera}
+            onCursorMove={(x, y) => reportCursor(x, y, selected ? `editando ${selected.name}` : null)}
+            remoteCursors={remoteCursors}
+          >
             {classes.map((c) => (
               <ClassCard
                 key={c.id}
