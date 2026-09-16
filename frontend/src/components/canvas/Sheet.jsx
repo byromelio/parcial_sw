@@ -1,10 +1,10 @@
  
 import React, { useCallback, useEffect, useRef, useState } from "react";
 
-export const SHEET = { COLS: 96, ROWS: 64, CELL: 16 };
+export const SHEET = { CELL: 16 };
 
 export default function Sheet({ children, onCanvasClick, onCameraChange }) {
-  const { COLS, ROWS, CELL } = SHEET;
+  const { CELL } = SHEET;
   const ref = useRef(null);
   const [cam, setCam] = useState(() => ({ x: 0, y: 0, z: 1 }));
   const panning = useRef(false);
@@ -85,6 +85,12 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
     onCanvasClick({ x_grid, y_grid });
   }, [onCanvasClick, cam.x, cam.y, cam.z, CELL]);
 
+  // Pizarra "infinita": en vez de un rectángulo de tamaño fijo, la grilla es
+  // un patrón de fondo que se repite en todo el área visible y se desplaza
+  // con la cámara -- así nunca hay un borde real donde el lienzo "se
+  // termine". Las clases no tienen límite máximo de posición (solo el
+  // mínimo, en handleClick, para no crearlas en coordenadas negativas).
+  const gridCell = CELL * cam.z;
   return (
     <div
       ref={ref}
@@ -94,7 +100,11 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        background: "var(--bg)",
+        background: "var(--surface-1)",
+        backgroundImage:
+          "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
+        backgroundSize: `${gridCell}px ${gridCell}px`,
+        backgroundPosition: `${cam.x}px ${cam.y}px`,
         userSelect: panning.current ? "none" : undefined,
         cursor: panning.current ? "grabbing" : "grab",
       }}
@@ -107,15 +117,6 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
           top: cam.y,
           transform: `scale(${cam.z})`,
           transformOrigin: "0 0",
-          width: COLS * CELL,
-          height: ROWS * CELL,
-          background:
-            "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
-          backgroundSize: `${CELL}px ${CELL}px`,
-          backgroundColor: "var(--surface-1)",
-          border: "1px solid var(--border-strong)",
-          borderRadius: 12,
-          overflow: "hidden",
         }}
       >
         {children}
