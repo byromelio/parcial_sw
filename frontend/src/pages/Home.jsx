@@ -5,6 +5,7 @@ import useAuth from "../store/auth";
 import useTheme from "../hooks/useTheme";
 import ApiStatusBadge from "../components/common/ApiStatusBadge";
 import Icon from "../components/common/Icon";
+import ImportFromPhotoModal from "../components/panels/ImportFromPhotoModal";
 
 import {
   listDiagrams as apiListDiagrams,
@@ -26,6 +27,7 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
   const [creating, setCreating] = useState(false);
+  const [showImport, setShowImport] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -147,6 +149,10 @@ export default function HomePage() {
                 <Icon name={creating ? "loader" : "plus"} className={creating ? "spinning" : ""} />
                 {creating ? "Creando…" : "Crear"}
               </button>
+              <button type="button" className="btn" onClick={() => setShowImport(true)} title="Crear un diagrama a partir de una foto del pizarrón">
+                <Icon name="camera" />
+                Importar desde foto
+              </button>
             </div>
             {msg && (
               <div style={{ fontSize: 12, color: "var(--danger)", display: "flex", gap: 6, alignItems: "center" }}>
@@ -229,6 +235,16 @@ export default function HomePage() {
           )}
         </div>
       </main>
+
+      {showImport && (
+        <ImportFromPhotoModal
+          onClose={() => setShowImport(false)}
+          onImported={(diagramId) => {
+            setShowImport(false);
+            nav(`/diagram/${diagramId}`);
+          }}
+        />
+      )}
     </div>
   );
 }
