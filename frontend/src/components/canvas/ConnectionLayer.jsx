@@ -156,8 +156,13 @@ export default function ConnectionLayer({
     >
       <defs>
         {/* Sombra suave para la relación seleccionada, igual que el halo
-            que ya usan las clases seleccionadas en el lienzo. */}
-        <filter id="rel-glow" x="-60%" y="-60%" width="220%" height="220%">
+            que ya usan las clases seleccionadas en el lienzo.
+            userSpaceOnUse (no objectBoundingBox, el default) porque una
+            línea horizontal o vertical tiene alto o ancho 0: con
+            objectBoundingBox el área de filtro se calcula como porcentaje
+            de esa caja y colapsa a 0px en ese eje, recortando toda la
+            línea en vez de solo agregarle sombra. */}
+        <filter id="rel-glow" filterUnits="userSpaceOnUse" x="-20" y="-20" width="10000" height="10000">
           <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={SELECTED_COLOR} floodOpacity="0.55" />
         </filter>
 
