@@ -463,6 +463,7 @@ export default function DiagramDashboard() {
             tempLink={linking ? { fromId: linking.fromId, fromSide: linking.fromSide, cursor: linking.cursor } : null}
             relations={relations}
             camera={camera}
+            selectedRelId={selectedRelId}
             onSelectRelation={(rid) => { setSelectedRelId(rid); setSelectedId(null); }}
           />
 

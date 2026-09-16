@@ -65,11 +65,21 @@ function AttributeRow({ attr, onPatch, onRemove }) {
   const inputRef = useRef(null);
   const { save, status, error } = useAutoSave();
 
+  // Tipo y obligatoriedad se editan de una vez (un select o un click, no
+  // tecla por tecla como el nombre), así que no hace falta debounce: se
+  // guardan al toque y muestran estado optimista para no depender de que
+  // vuelva la respuesta del servidor antes de reflejar el cambio.
+  const [type, setType] = useState(attr.type ?? attr.tipo ?? "string");
+  const [required, setRequired] = useState(!!attr.required);
+  const { save: saveNow, status: statusNow, error: errorNow } = useAutoSave(0);
+
   // Sincroniza si el valor cambió en el servidor (otro usuario, o el
   // asistente de IA) mientras no lo estamos editando nosotros.
   useEffect(() => {
     if (document.activeElement !== inputRef.current) setName(serverName);
   }, [serverName]);
+  useEffect(() => { setType(attr.type ?? attr.tipo ?? "string"); }, [attr.type, attr.tipo]);
+  useEffect(() => { setRequired(!!attr.required); }, [attr.required]);
 
   return (
     <div
@@ -77,7 +87,7 @@ function AttributeRow({ attr, onPatch, onRemove }) {
         display: "grid",
         gap: "var(--sp-2)",
         padding: "var(--sp-3)",
-        border: `1px solid ${error ? "var(--danger)" : "var(--border)"}`,
+        border: `1px solid ${error || errorNow ? "var(--danger)" : "var(--border)"}`,
         borderRadius: "var(--radius)",
         background: "var(--surface-2)",
       }}
@@ -102,8 +112,12 @@ function AttributeRow({ attr, onPatch, onRemove }) {
 
       <select
         className="select input-sm"
-        value={attr.type ?? attr.tipo ?? "string"}
-        onChange={(e) => save(() => onPatch({ type: e.target.value }))}
+        value={type}
+        onChange={(e) => {
+          const val = e.target.value;
+          setType(val);
+          saveNow(() => onPatch({ type: val }));
+        }}
       >
         {TYPE_OPTIONS.map((o) => (
           <option key={o.v} value={o.v}>{o.label}</option>
@@ -116,13 +130,18 @@ function AttributeRow({ attr, onPatch, onRemove }) {
       >
         <input
           type="checkbox"
-          checked={!!attr.required}
-          onChange={(e) => save(() => onPatch({ required: e.target.checked }))}
+          checked={required}
+          onChange={(e) => {
+            const val = e.target.checked;
+            setRequired(val);
+            saveNow(() => onPatch({ required: val }));
+          }}
         />
         <span className="text-muted">Obligatorio (NOT NULL)</span>
+        <SaveStatus status={statusNow} />
       </label>
 
-      <RowError message={error} />
+      <RowError message={error || errorNow} />
     </div>
   );
 }

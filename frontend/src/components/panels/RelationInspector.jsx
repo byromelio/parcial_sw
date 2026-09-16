@@ -33,6 +33,47 @@ const ANCHORS = [
   { v: "bottom", label: "Abajo" },
 ];
 
+/** Vista previa en miniatura de cómo se ve cada tipo de relación en el
+ * diagrama: la misma notación UML que dibuja ConnectionLayer, a escala
+ * chica, para que elegir el tipo no dependa de recordar qué es cada uno. */
+function RelationTypePreview({ type }) {
+  const color = "var(--accent)";
+  const common = { stroke: color, strokeWidth: 1.8, strokeLinecap: "round" };
+  let marker = null;
+  let dashed = false;
+
+  switch (type) {
+    case "INHERITANCE":
+      marker = (
+        <path d="M 44 8 L 30 4 L 44 0 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.4" strokeLinejoin="round" />
+      );
+      break;
+    case "AGGREGATION":
+      marker = (
+        <path d="M 44 8 L 34 4 L 44 0 L 54 4 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.4" strokeLinejoin="round" />
+      );
+      break;
+    case "COMPOSITION":
+      marker = (
+        <path d="M 44 8 L 34 4 L 44 0 L 54 4 z" fill={color} />
+      );
+      break;
+    case "DEPENDENCY":
+      dashed = true;
+      marker = <path d="M 4 4 L 14 0 L 14 8 z" fill={color} />;
+      break;
+    default: // ASSOCIATION
+      marker = null;
+  }
+
+  return (
+    <svg viewBox="0 0 60 8" width="60" height="8" style={{ flexShrink: 0 }}>
+      <line x1="2" y1="4" x2="58" y2="4" {...common} strokeDasharray={dashed ? "4,3" : undefined} />
+      {marker}
+    </svg>
+  );
+}
+
 export default function RelationInspector({ relation, onUpdate, onDelete }) {
   const [localLabel, setLocalLabel] = useState(relation?.label ?? "");
   const [localMultOrigenMin, setLocalMultOrigenMin] = useState(relation?.src_mult_min ?? "");
@@ -117,6 +158,20 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
       >
         <Icon name="relation" size={15} style={{ color: "var(--accent)" }} />
         <strong style={{ fontSize: 13, flex: 1 }}>Relación</strong>
+        {tipoActual && (
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 600,
+              padding: "2px var(--sp-2)",
+              borderRadius: 999,
+              background: "var(--accent-soft)",
+              color: "var(--accent)",
+            }}
+          >
+            {tipoActual.label}
+          </span>
+        )}
         <button className="btn btn-danger-ghost btn-sm" onClick={onDelete} title="Eliminar esta relación">
           <Icon name="trash" size={14} />
           Eliminar
@@ -130,16 +185,35 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            gap: "var(--sp-2)",
-            padding: "var(--sp-3)",
+            gap: "var(--sp-3)",
+            padding: "var(--sp-4) var(--sp-3)",
             borderRadius: "var(--radius)",
+            border: "1px solid var(--border)",
             background: "var(--surface-2)",
             fontSize: 13,
           }}
         >
-          <strong>{relation.origen_nombre}</strong>
-          <Icon name="chevronRight" size={14} style={{ color: "var(--text-subtle)" }} />
-          <strong>{relation.destino_nombre}</strong>
+          <span
+            style={{
+              padding: "var(--sp-1) var(--sp-2)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--surface-3)",
+              fontWeight: 600,
+            }}
+          >
+            {relation.origen_nombre}
+          </span>
+          <RelationTypePreview type={relation.type} />
+          <span
+            style={{
+              padding: "var(--sp-1) var(--sp-2)",
+              borderRadius: "var(--radius-sm)",
+              background: "var(--surface-3)",
+              fontWeight: 600,
+            }}
+          >
+            {relation.destino_nombre}
+          </span>
         </div>
 
         {/* Tipo */}
@@ -150,9 +224,21 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
               <option key={t.v} value={t.v}>{t.label}</option>
             ))}
           </select>
-          {tipoActual && (
-            <div className="text-subtle" style={{ fontSize: 12 }}>{tipoActual.ayuda}</div>
-          )}
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "var(--sp-3)",
+              padding: "var(--sp-2) var(--sp-3)",
+              borderRadius: "var(--radius)",
+              background: "var(--surface-2)",
+            }}
+          >
+            <RelationTypePreview type={relation.type} />
+            {tipoActual && (
+              <div className="text-subtle" style={{ fontSize: 12, flex: 1 }}>{tipoActual.ayuda}</div>
+            )}
+          </div>
         </div>
 
         {/* Multiplicidad */}

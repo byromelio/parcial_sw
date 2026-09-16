@@ -18,6 +18,13 @@ export default function useAutoSave(delay = 600) {
   const alive = useRef(true);
 
   useEffect(() => {
+    // Resetear acá (no alcanza con `useRef(true)` en la declaración): en
+    // StrictMode React monta, desmonta y vuelve a montar cada componente al
+    // arrancar, y si el segundo montaje reusa el mismo ref ya marcado como
+    // "muerto" por el cleanup del primero, cualquier guardado agendado justo
+    // después se descartaba en silencio sin avisar ni al usuario ni a la
+    // consola -- el checkbox se veía tildado pero nunca llegaba al backend.
+    alive.current = true;
     return () => {
       alive.current = false;
       if (timer.current) clearTimeout(timer.current);

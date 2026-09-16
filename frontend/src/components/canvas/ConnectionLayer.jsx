@@ -1,15 +1,24 @@
-
 // src/components/canvas/ConnectionLayer.jsx
+//
+// Dibuja las relaciones UML entre clases como una capa SVG superpuesta al
+// lienzo. Lee la posición de cada clase directo del DOM (no de `classes`)
+// porque durante un drag/resize el estado de posición vive localmente en
+// cada ClassCard hasta que se suelta el mouse.
+
 import { useEffect, useMemo, useState } from "react";
 import { getAnchorForClassSide } from "./utils/geometry";
+
+const DEFAULT_COLOR = "#7cf7ff";
+const SELECTED_COLOR = "#4f7cff"; // var(--accent)
 
 export default function ConnectionLayer({
   classes,
   tempLink = null,
   relations = [],
-  strokeColor = "#7cf7ff",
+  strokeColor = DEFAULT_COLOR,
   strokeWidth = 2,
   camera,
+  selectedRelId = null,
   onSelectRelation,
 }) {
   const [viewport, setViewport] = useState(() => ({
@@ -102,7 +111,7 @@ export default function ConnectionLayer({
 
       if (!a || !b) continue;
 
-      segs.push({ ...r, a, b, recursive: r.fromId === r.toId, });
+      segs.push({ ...r, a, b, recursive: r.fromId === r.toId });
     }
     return segs;
   }, [relations, classes, camera, geometryTick]);
@@ -114,6 +123,21 @@ export default function ConnectionLayer({
     if (!from || !to) return null;
     return { a: from, b: to, type: "ASSOCIATION" };
   }, [tempLink, classes, camera]);
+
+  /** Curva de una relación recursiva (una clase relacionada consigo misma). */
+  const recursivePath = (seg) => {
+    const offset = 200;
+    switch (seg.srcA) {
+      case "top":
+        return `M ${seg.a.x} ${seg.a.y} C ${seg.a.x} ${seg.a.y - offset}, ${seg.b.x} ${seg.b.y - offset}, ${seg.b.x} ${seg.b.y}`;
+      case "bottom":
+        return `M ${seg.a.x} ${seg.a.y} C ${seg.a.x} ${seg.a.y + offset}, ${seg.b.x} ${seg.b.y + offset}, ${seg.b.x} ${seg.b.y}`;
+      case "left":
+        return `M ${seg.a.x} ${seg.a.y} C ${seg.a.x - offset} ${seg.a.y}, ${seg.b.x - offset} ${seg.b.y}, ${seg.b.x} ${seg.b.y}`;
+      default: // right
+        return `M ${seg.a.x} ${seg.a.y} C ${seg.a.x + offset} ${seg.a.y}, ${seg.b.x + offset} ${seg.b.y}, ${seg.b.x} ${seg.b.y}`;
+    }
+  };
 
   return (
     <svg
@@ -131,37 +155,50 @@ export default function ConnectionLayer({
       }}
     >
       <defs>
-        {/* Marcadores para los distintos tipos */}
-        <marker id="arrow-normal" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto">
-          <path d="M 0 0 L 10 5 L 0 10 z" fill={strokeColor} />
-        </marker>
-        <marker id="arrow-hollow" viewBox="0 0 20 20" refX="20" refY="10" markerWidth="12" markerHeight="12" orient="auto">
-          <path d="M 0 0 L 20 10 L 0 20 z" fill="white" stroke={strokeColor} strokeWidth="2" />
-        </marker>
-        <marker id="diamond-hollow" viewBox="0 0 20 20" refX="20" refY="10" markerWidth="12" markerHeight="12" orient="auto">
-          <path d="M 0 10 L 10 0 L 20 10 L 10 20 z" fill="white" stroke={strokeColor} strokeWidth="2" />
-        </marker>
-        <marker id="diamond-filled" viewBox="0 0 20 20" refX="20" refY="10" markerWidth="12" markerHeight="12" orient="auto">
-          <path d="M 0 10 L 10 0 L 20 10 L 10 20 z" fill={strokeColor} />
-        </marker>
+        {/* Sombra suave para la relación seleccionada, igual que el halo
+            que ya usan las clases seleccionadas en el lienzo. */}
+        <filter id="rel-glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={SELECTED_COLOR} floodOpacity="0.55" />
+        </filter>
+
+        {/* Marcadores por color: uno para el trazo normal y otro para la
+            relación seleccionada, con su propio color de acento. */}
+        {[
+          { suffix: "", color: strokeColor },
+          { suffix: "-sel", color: SELECTED_COLOR },
+        ].map(({ suffix, color }) => (
+          <g key={suffix || "default"}>
+            <marker id={`arrow-normal${suffix}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+              <path d="M 0 0.5 L 9 5 L 0 9.5 z" fill={color} />
+            </marker>
+            <marker id={`arrow-hollow${suffix}`} viewBox="0 0 22 16" refX="20" refY="8" markerWidth="15" markerHeight="11" orient="auto-start-reverse">
+              <path d="M 1 8 L 20 1 L 20 15 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+            </marker>
+            <marker id={`diamond-hollow${suffix}`} viewBox="0 0 24 14" refX="22" refY="7" markerWidth="17" markerHeight="10" orient="auto-start-reverse">
+              <path d="M 1 7 L 12 1 L 23 7 L 12 13 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+            </marker>
+            <marker id={`diamond-filled${suffix}`} viewBox="0 0 24 14" refX="22" refY="7" markerWidth="17" markerHeight="10" orient="auto-start-reverse">
+              <path d="M 1 7 L 12 1 L 23 7 L 12 13 z" fill={color} />
+            </marker>
+          </g>
+        ))}
       </defs>
 
       {relationSegments.map((seg) => {
-
-
-
+        const isSelected = seg.id === selectedRelId;
+        const color = isSelected ? SELECTED_COLOR : strokeColor;
+        const suffix = isSelected ? "-sel" : "";
 
         const so = labelOffset(seg.srcA);
         const dof = labelOffset(seg.dstA);
         const mid = { x: (seg.a.x + seg.b.x) / 2, y: (seg.a.y + seg.b.y) / 2 };
 
-        // estilo base
-        let lineProps = {
-          stroke: strokeColor,
-          strokeWidth,
+        const lineProps = {
+          stroke: color,
+          strokeWidth: isSelected ? strokeWidth + 1 : strokeWidth,
           strokeLinecap: "round",
+          filter: isSelected ? "url(#rel-glow)" : undefined,
         };
-        let markerStart = null;
         let markerEnd = null;
 
         switch (seg.type) {
@@ -170,272 +207,69 @@ export default function ConnectionLayer({
             break;
           case "INHERITANCE":
           case "GENERALIZATION":
-            markerEnd = "url(#arrow-hollow)";
+            markerEnd = `url(#arrow-hollow${suffix})`;
             break;
           case "AGGREGATION":
-            markerEnd = "url(#diamond-hollow)";
+            markerEnd = `url(#diamond-hollow${suffix})`;
             break;
           case "COMPOSITION":
-            markerEnd = "url(#diamond-filled)";
+            markerEnd = `url(#diamond-filled${suffix})`;
             break;
           case "DEPENDENCY":
             lineProps.strokeDasharray = "6,4";
-            markerEnd = "url(#arrow-normal)";
+            markerEnd = `url(#arrow-normal${suffix})`;
             break;
           default:
             markerEnd = null;
         }
 
-        // // 🔹 CASO RECURSIVO
+        const labelStyle = {
+          userSelect: "none",
+          fontWeight: isSelected ? 600 : 400,
+          fill: isSelected ? SELECTED_COLOR : "var(--text-muted)",
+        };
 
-
-        // 🔹 CASO RECURSIVO
-        //       if (seg.recursive) {
-        //         // curva en forma de lazo
-        //         const d = `
-        //   M ${seg.a.x} ${seg.a.y}
-        //   C ${seg.a.x + 120} ${seg.a.y - 120},
-        //     ${seg.b.x + 120} ${seg.b.y + 120},
-        //     ${seg.b.x} ${seg.b.y}
-        // `;
-
-        //         return (
-        //           <g key={seg.id}>
-        //             {/* curva visible */}
-        //             <path
-        //               d={d}
-        //               {...lineProps}
-        //               fill="none"
-        //               markerEnd={markerEnd}
-        //             />
-        //             {/* curva invisible para click/selección */}
-        //             <path
-        //               d={d}
-        //               stroke="transparent"
-        //               strokeWidth={Math.max(16, strokeWidth + 10)}
-        //               fill="none"
-        //               style={{ pointerEvents: "auto", cursor: onSelectRelation ? "pointer" : "default" }}
-        //               onClick={() => onSelectRelation?.(seg.id)}
-        //             />
-        //             {/* multiplicidades */}
-        //             <text
-        //               x={seg.a.x + so.dx}
-        //               y={seg.a.y + so.dy}
-        //               fontSize="12"
-        //               fill={strokeColor}
-        //               textAnchor={so.anchor}
-        //               style={{ userSelect: "none" }}
-        //             >
-        //               {fmtMult(seg.srcMin, seg.srcMax)}
-        //             </text>
-        //             <text
-        //               x={seg.b.x + dof.dx}
-        //               y={seg.b.y + dof.dy}
-        //               fontSize="12"
-        //               fill={strokeColor}
-        //               textAnchor={dof.anchor}
-        //               style={{ userSelect: "none" }}
-        //             >
-        //               {fmtMult(seg.dstMin, seg.dstMax)}
-        //             </text>
-        //             {seg.label && (
-        //               <text
-        //                 x={mid.x}
-        //                 y={mid.y - 6}
-        //                 fontSize="12"
-        //                 fill={strokeColor}
-        //                 textAnchor="middle"
-        //                 style={{ userSelect: "none" }}
-        //               >
-        //                 {seg.label}
-        //               </text>
-        //             )}
-        //           </g>
-        //         );
-        //       }
-
-
-
-        // 🔹 CASO NORMAL
-        // return (
-        //   <g key={seg.id}>
-        //     <line
-        //       x1={seg.a.x} y1={seg.a.y}
-        //       x2={seg.b.x} y2={seg.b.y}
-        //       {...lineProps}
-        //       markerStart={markerStart}
-        //       markerEnd={markerEnd}
-        //     />
-        //     <line
-        //       x1={seg.a.x} y1={seg.a.y}
-        //       x2={seg.b.x} y2={seg.b.y}
-        //       stroke="transparent"
-        //       strokeWidth={Math.max(16, strokeWidth + 10)}
-        //       style={{ pointerEvents: "auto", cursor: onSelectRelation ? "pointer" : "default" }}
-        //       onClick={() => onSelectRelation?.(seg.id)}
-        //     />
-        //     <text
-        //       x={seg.a.x + so.dx}
-        //       y={seg.a.y + so.dy}
-        //       fontSize="12"
-        //       fill={strokeColor}
-        //       textAnchor={so.anchor}
-        //       style={{ userSelect: "none" }}
-        //     >
-        //       {fmtMult(seg.srcMin, seg.srcMax)}
-        //     </text>
-        //     <text
-        //       x={seg.b.x + dof.dx}
-        //       y={seg.b.y + dof.dy}
-        //       fontSize="12"
-        //       fill={strokeColor}
-        //       textAnchor={dof.anchor}
-        //       style={{ userSelect: "none" }}
-        //     >
-        //       {fmtMult(seg.dstMin, seg.dstMax)}
-        //     </text>
-        //     {seg.label && (
-        //       <text
-        //         x={mid.x}
-        //         y={mid.y - 6}
-        //         fontSize="12"
-        //         fill={strokeColor}
-        //         textAnchor="middle"
-        //         style={{ userSelect: "none" }}
-        //       >
-        //         {seg.label}
-        //       </text>
-        //     )}
-        //   </g>
-        // );
-        return (
-          <g key={seg.id}>
-            {seg.recursive ? (
-              <g key={seg.id}>
-                {(() => {
-                  const offset = 200;
-                  let d = "";
-
-                  switch (seg.srcA) {
-                    case "top":
-                      d = `M ${seg.a.x} ${seg.a.y} C ${seg.a.x} ${seg.a.y - offset}, ${seg.b.x} ${seg.b.y - offset}, ${seg.b.x} ${seg.b.y}`;
-                      break;
-                    case "bottom":
-                      d = `M ${seg.a.x} ${seg.a.y} C ${seg.a.x} ${seg.a.y + offset}, ${seg.b.x} ${seg.b.y + offset}, ${seg.b.x} ${seg.b.y}`;
-                      break;
-                    case "left":
-                      d = `M ${seg.a.x} ${seg.a.y} C ${seg.a.x - offset} ${seg.a.y}, ${seg.b.x - offset} ${seg.b.y}, ${seg.b.x} ${seg.b.y}`;
-                      break;
-                    default: // right
-                      d = `M ${seg.a.x} ${seg.a.y} C ${seg.a.x + offset} ${seg.a.y}, ${seg.b.x + offset} ${seg.b.y}, ${seg.b.x} ${seg.b.y}`;
-                  }
-
-                  return (
-                    <>
-                      {/* curva visible */}
-                      <path d={d} {...lineProps} fill="none" markerEnd={markerEnd} />
-
-                      {/* curva invisible para click/selección */}
-                      <path
-                        d={d}
-                        stroke="transparent"
-                        strokeWidth={Math.max(16, strokeWidth + 10)}
-                        style={{ pointerEvents: "auto", cursor: onSelectRelation ? "pointer" : "default" }}
-                        onClick={() => onSelectRelation?.(seg.id)}
-                        fill="none"
-                      />
-
-                      {/* multiplicidades */}
-                      <text
-                        x={seg.a.x + so.dx}
-                        y={seg.a.y + so.dy}
-                        fontSize="12"
-                        fill={strokeColor}
-                        textAnchor={so.anchor}
-                        style={{ userSelect: "none" }}
-                      >
-                        {fmtMult(seg.srcMin, seg.srcMax)}
-                      </text>
-                      <text
-                        x={seg.b.x + dof.dx}
-                        y={seg.b.y + dof.dy}
-                        fontSize="12"
-                        fill={strokeColor}
-                        textAnchor={dof.anchor}
-                        style={{ userSelect: "none" }}
-                      >
-                        {fmtMult(seg.dstMin, seg.dstMax)}
-                      </text>
-                      {seg.label && (
-                        <text
-                          x={mid.x}
-                          y={mid.y - 6}
-                          fontSize="12"
-                          fill={strokeColor}
-                          textAnchor="middle"
-                          style={{ userSelect: "none" }}
-                        >
-                          {seg.label}
-                        </text>
-                      )}
-                    </>
-                  );
-                })()}
-              </g>
-            ) : (
-              <>
-                <line
-                  x1={seg.a.x} y1={seg.a.y}
-                  x2={seg.b.x} y2={seg.b.y}
-                  {...lineProps}
-                  markerStart={markerStart}
-                  markerEnd={markerEnd}
-                />
-                <line
-                  x1={seg.a.x} y1={seg.a.y}
-                  x2={seg.b.x} y2={seg.b.y}
-                  stroke="transparent"
-                  strokeWidth={Math.max(16, strokeWidth + 10)}
-                  style={{ pointerEvents: "auto", cursor: onSelectRelation ? "pointer" : "default" }}
-                  onClick={() => onSelectRelation?.(seg.id)}
-                />
-                <text
-                  x={seg.a.x + so.dx}
-                  y={seg.a.y + so.dy}
-                  fontSize="12"
-                  fill={strokeColor}
-                  textAnchor={so.anchor}
-                  style={{ userSelect: "none" }}
-                >
-                  {fmtMult(seg.srcMin, seg.srcMax)}
-                </text>
-                <text
-                  x={seg.b.x + dof.dx}
-                  y={seg.b.y + dof.dy}
-                  fontSize="12"
-                  fill={strokeColor}
-                  textAnchor={dof.anchor}
-                  style={{ userSelect: "none" }}
-                >
-                  {fmtMult(seg.dstMin, seg.dstMax)}
-                </text>
-                {seg.label && (
-                  <text
-                    x={mid.x}
-                    y={mid.y - 6}
-                    fontSize="12"
-                    fill={strokeColor}
-                    textAnchor="middle"
-                    style={{ userSelect: "none" }}
-                  >
-                    {seg.label}
-                  </text>
-                )}
-              </>
+        const labels = (
+          <>
+            <text x={seg.a.x + so.dx} y={seg.a.y + so.dy} fontSize="12" textAnchor={so.anchor} style={labelStyle}>
+              {fmtMult(seg.srcMin, seg.srcMax)}
+            </text>
+            <text x={seg.b.x + dof.dx} y={seg.b.y + dof.dy} fontSize="12" textAnchor={dof.anchor} style={labelStyle}>
+              {fmtMult(seg.dstMin, seg.dstMax)}
+            </text>
+            {seg.label && (
+              <text x={mid.x} y={mid.y - 6} fontSize="12" textAnchor="middle" style={labelStyle}>
+                {seg.label}
+              </text>
             )}
-          </g>
+          </>
         );
 
+        const hitProps = {
+          stroke: "transparent",
+          strokeWidth: Math.max(16, strokeWidth + 10),
+          style: { pointerEvents: "auto", cursor: onSelectRelation ? "pointer" : "default" },
+          onClick: () => onSelectRelation?.(seg.id),
+        };
+
+        if (seg.recursive) {
+          const d = recursivePath(seg);
+          return (
+            <g key={seg.id}>
+              <path d={d} {...lineProps} fill="none" markerEnd={markerEnd} />
+              <path d={d} {...hitProps} fill="none" />
+              {labels}
+            </g>
+          );
+        }
+
+        return (
+          <g key={seg.id}>
+            <line x1={seg.a.x} y1={seg.a.y} x2={seg.b.x} y2={seg.b.y} {...lineProps} markerEnd={markerEnd} />
+            <line x1={seg.a.x} y1={seg.a.y} x2={seg.b.x} y2={seg.b.y} {...hitProps} />
+            {labels}
+          </g>
+        );
       })}
 
       {tempSegment && (
