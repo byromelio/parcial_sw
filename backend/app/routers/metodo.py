@@ -10,7 +10,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.uml import Metodo, Clase, Diagram
 from app.schemas.metodo import MetodoCreate, MetodoUpdate, MetodoOut
-from ._helpers import get_my_class
+from ._helpers import get_my_class, get_my_method
 from app.utils import realtime_events
 
 logger = logging.getLogger(__name__)
@@ -82,16 +82,7 @@ async def update_method(
     me: User = Depends(get_current_user),
 ):
     logger.info(f"✏️ [UPDATE] método -> method_id={method_id}, user={me.id}, body={body}")
-    m = (
-        db.query(Metodo)
-        .join(Clase, Clase.id == Metodo.clase_id)
-        .join(Diagram, Diagram.id == Clase.diagram_id)
-        .filter(Metodo.id == method_id, Diagram.owner_id == me.id)
-        .one_or_none()
-    )
-    if not m:
-        logger.warning(f"⚠️ Método no encontrado -> method_id={method_id}, user={me.id}")
-        raise HTTPException(404, "Método no encontrado")
+    m = get_my_method(db, me, method_id)
 
     try:
         if body.name is not None and body.name != m.nombre:
@@ -120,16 +111,7 @@ async def delete_method(
     me: User = Depends(get_current_user),
 ):
     logger.info(f"🗑️ [DELETE] método -> method_id={method_id}, user={me.id}")
-    m = (
-        db.query(Metodo)
-        .join(Clase, Clase.id == Metodo.clase_id)
-        .join(Diagram, Diagram.id == Clase.diagram_id)
-        .filter(Metodo.id == method_id, Diagram.owner_id == me.id)
-        .one_or_none()
-    )
-    if not m:
-        logger.warning(f"⚠️ Método no encontrado -> method_id={method_id}, user={me.id}")
-        raise HTTPException(404, "Método no encontrado")
+    m = get_my_method(db, me, method_id)
 
     try:
         c = m.clase

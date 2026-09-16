@@ -12,7 +12,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.uml import Diagram, Clase, Relacion, RelType
 from app.schemas.relacion import RelacionCreate, RelacionUpdate, RelacionOut
-from ._helpers import get_my_diagram
+from ._helpers import get_my_diagram, get_my_relation, _accessible_diagram_filter
 from app.utils import realtime_events  # 👈 notificaciones en tiempo real
 from app.schemas.relacion import RelacionOut
 
@@ -34,7 +34,7 @@ def _get_class_in_my_diagram(
         .filter(
             Clase.id == class_id,
             Clase.diagram_id == diagram_id,
-            Diagram.owner_id == me.id,
+            _accessible_diagram_filter(me),
         )
         .one_or_none()
     )
@@ -142,15 +142,7 @@ async def update_relation(
     me: User = Depends(get_current_user),
 ):
     logger.info(f"✏️ [UPDATE] relación -> relation_id={relation_id}, user={me.id}, body={body}")
-    r = (
-        db.query(Relacion)
-        .join(Diagram, Diagram.id == Relacion.diagram_id)
-        .filter(Relacion.id == relation_id, Diagram.owner_id == me.id)
-        .one_or_none()
-    )
-    if not r:
-        logger.warning(f"⚠️ Relación no encontrada -> relation_id={relation_id}, user={me.id}")
-        raise HTTPException(404, detail="Relación no encontrada")
+    r = get_my_relation(db, me, relation_id)
 
     try:
         # ⚡️ Campos normales
@@ -209,15 +201,7 @@ async def delete_relation(
     me: User = Depends(get_current_user),
 ):
     logger.info(f"🗑️ [DELETE] relación -> relation_id={relation_id}, user={me.id}")
-    r = (
-        db.query(Relacion)
-        .join(Diagram, Diagram.id == Relacion.diagram_id)
-        .filter(Relacion.id == relation_id, Diagram.owner_id == me.id)
-        .one_or_none()
-    )
-    if not r:
-        logger.warning(f"⚠️ Relación no encontrada -> relation_id={relation_id}, user={me.id}")
-        raise HTTPException(404, detail="Relación no encontrada")
+    r = get_my_relation(db, me, relation_id)
 
     try:
         diagram_id = r.diagram_id
@@ -241,14 +225,7 @@ def get_relation(
     db: Session = Depends(get_db),
     me: User = Depends(get_current_user),
 ):
-    r = (
-        db.query(Relacion)
-        .join(Diagram, Diagram.id == Relacion.diagram_id)
-        .filter(Relacion.id == relation_id, Diagram.owner_id == me.id)
-        .one_or_none()
-    )
-    if not r:
-        raise HTTPException(404, detail="Relación no encontrada")
+    r = get_my_relation(db, me, relation_id)
 
     origen_nombre = db.query(Clase.nombre).filter(Clase.id == r.origen_id).scalar()
     destino_nombre = db.query(Clase.nombre).filter(Clase.id == r.destino_id).scalar()

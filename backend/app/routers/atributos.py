@@ -10,7 +10,7 @@ from app.core.security import get_current_user
 from app.models.user import User
 from app.models.uml import Atributo, Clase, Diagram
 from app.schemas.atributo import AtributoCreate, AtributoUpdate, AtributoOut
-from ._helpers import get_my_class
+from ._helpers import get_my_class, get_my_attribute
 from app.utils import realtime_events
 
 logger = logging.getLogger(__name__)
@@ -82,16 +82,7 @@ async def update_attribute(
     me: User = Depends(get_current_user),
 ):
     logger.info(f"✏️ [UPDATE] atributo -> attr_id={attr_id}, user={me.id}, body={body}")
-    a = (
-        db.query(Atributo)
-        .join(Clase, Clase.id == Atributo.clase_id)
-        .join(Diagram, Diagram.id == Clase.diagram_id)
-        .filter(Atributo.id == attr_id, Diagram.owner_id == me.id)
-        .one_or_none()
-    )
-    if not a:
-        logger.warning(f"⚠️ Atributo no encontrado -> attr_id={attr_id}, user={me.id}")
-        raise HTTPException(404, "Atributo no encontrado")
+    a = get_my_attribute(db, me, attr_id)
 
     try:
         if body.name is not None and body.name != a.nombre:
@@ -121,16 +112,7 @@ async def delete_attribute(
     me: User = Depends(get_current_user),
 ):
     logger.info(f"🗑️ [DELETE] atributo -> attr_id={attr_id}, user={me.id}")
-    a = (
-        db.query(Atributo)
-        .join(Clase, Clase.id == Atributo.clase_id)
-        .join(Diagram, Diagram.id == Clase.diagram_id)
-        .filter(Atributo.id == attr_id, Diagram.owner_id == me.id)
-        .one_or_none()
-    )
-    if not a:
-        logger.warning(f"⚠️ Atributo no encontrado -> attr_id={attr_id}, user={me.id}")
-        raise HTTPException(404, "Atributo no encontrado")
+    a = get_my_attribute(db, me, attr_id)
 
     try:
         c = a.clase
