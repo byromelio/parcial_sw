@@ -183,6 +183,8 @@ function MethodRow({ meth, onPatch, onRemove }) {
   );
 }
 
+const COLLAPSE_KEY = "uml.inspector.collapsed";
+
 export default function Inspector({
   selected,
   details,
@@ -201,25 +203,56 @@ export default function Inspector({
   const nameRef = useRef(null);
   const { save: saveName, status: nameStatus, error: nameError } = useAutoSave();
 
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
+  useEffect(() => {
+    localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
+
   useEffect(() => {
     setAddError("");
     if (document.activeElement !== nameRef.current) setName(selected ? selected.name : "");
   }, [selected?.id, selected?.name]);
 
   const asideStyle = {
-    width: "var(--inspector-w)",
+    width: collapsed ? "var(--inspector-collapsed-w, 44px)" : "var(--inspector-w)",
     borderLeft: "1px solid var(--border)",
     background: "var(--surface-1)",
     display: "flex",
     flexDirection: "column",
     position: "relative",
     zIndex: "var(--z-chrome)",
+    transition: "width .15s ease",
   };
+
+  const CollapseToggle = ({ style }) => (
+    <button
+      className="btn btn-ghost btn-icon btn-sm"
+      onClick={() => setCollapsed((v) => !v)}
+      title={collapsed ? "Desplegar panel" : "Plegar panel"}
+      style={style}
+    >
+      <Icon name={collapsed ? "chevronLeft" : "chevronRight"} size={14} />
+    </button>
+  );
+
+  // ---------- Plegado: franja angosta, sin importar si hay selección ----------
+  if (collapsed) {
+    return (
+      <aside style={asideStyle}>
+        <div style={{ padding: "var(--sp-3) var(--sp-2)", display: "flex", justifyContent: "center" }}>
+          <CollapseToggle />
+        </div>
+      </aside>
+    );
+  }
 
   // ---------- Sin selección ----------
   if (!selected) {
     return (
       <aside style={asideStyle}>
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "var(--sp-2) var(--sp-2) 0" }}>
+          <CollapseToggle />
+        </div>
         <div
           style={{
             margin: "auto",
@@ -274,6 +307,7 @@ export default function Inspector({
           <Icon name="trash" size={14} />
           Eliminar
         </button>
+        <CollapseToggle />
       </div>
 
       <div className="scroll" style={{ flex: 1, padding: "var(--sp-4)", display: "grid", gap: "var(--sp-5)", alignContent: "start" }}>

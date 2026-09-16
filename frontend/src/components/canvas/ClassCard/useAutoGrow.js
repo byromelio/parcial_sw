@@ -31,7 +31,10 @@ export default function useAutoGrow({
     const bodyH = bodyRef.current?.scrollHeight ?? 0;
     const totalPx = headerH + bodyH + 16;
     const neededRows = clamp(Math.ceil(totalPx / CELL), minH, maxH);
-    if (neededRows !== size.h) {
+    // Solo crece para que el contenido no se corte; nunca achica lo que el
+    // usuario agrandó a mano (por ejemplo, redimensionando desde el borde
+    // superior con menos atributos de los que entrarían en ese alto).
+    if (neededRows > size.h) {
       setSize((s) => ({ ...s, h: neededRows }));
       persistResizeDebounced(neededRows);
     }

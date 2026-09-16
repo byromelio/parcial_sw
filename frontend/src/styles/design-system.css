@@ -60,6 +60,7 @@
   --header-h: 56px;
   --panel-w: 264px;
   --inspector-w: 340px;
+  --inspector-collapsed-w: 44px;
 
   /* Capas (z-index). Escala única para todo el editor: la capa de
      relaciones se dibuja en coordenadas de pantalla (position: fixed), así

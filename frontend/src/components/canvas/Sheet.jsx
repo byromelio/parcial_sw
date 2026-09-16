@@ -15,15 +15,20 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
     const delta = Math.sign(e.deltaY) * 0.1;
     setCam((c) => {
       const z = Math.min(1.5, Math.max(0.5, c.z - delta)); // clamp
-      const next = { ...c, z };
-      onCameraChange?.(next);
-      return next;
+      return { ...c, z };
     });
-  }, [onCameraChange]);
+  }, []);
+
+  const moved = useRef(false);
 
   const onMouseDown = useCallback((e) => {
-    if (e.button !== 1 && !(e.button === 0 && e.ctrlKey)) return;
+    // Botón central, Ctrl+izquierdo, o izquierdo sobre espacio vacío (no
+    // sobre una clase u otro elemento interactivo) -- igual que draw.io:
+    // mantener click en la pizarra y arrastrar mueve la vista.
+    const onEmptySpace = e.target === e.currentTarget || e.target === ref.current?.firstElementChild;
+    if (e.button !== 1 && !(e.button === 0 && (e.ctrlKey || onEmptySpace))) return;
     panning.current = true;
+    moved.current = false;
     last.current = { x: e.clientX, y: e.clientY };
   }, []);
 
@@ -31,15 +36,20 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
     if (!panning.current) return;
     const dx = e.clientX - last.current.x;
     const dy = e.clientY - last.current.y;
+    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) moved.current = true;
     last.current = { x: e.clientX, y: e.clientY };
-    setCam((c) => {
-      const next = { ...c, x: c.x + dx, y: c.y + dy };
-      onCameraChange?.(next);
-      return next;
-    });
-  }, [onCameraChange]);
+    setCam((c) => ({ ...c, x: c.x + dx, y: c.y + dy }));
+  }, []);
 
   const onMouseUp = useCallback(() => { panning.current = false; }, []);
+
+  // Avisar al padre después del commit, nunca desde dentro del updater de
+  // setCam: llamar un setState ajeno mientras React todavía está
+  // resolviendo el de este componente dispara "Cannot update a component
+  // while rendering a different component".
+  useEffect(() => {
+    onCameraChange?.(cam);
+  }, [cam, onCameraChange]);
 
   useEffect(() => {
     const el = ref.current;
@@ -63,6 +73,7 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
 
   const handleClick = useCallback((e) => {
     if (!onCanvasClick) return;
+    if (moved.current) { moved.current = false; return; }
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     const localX = e.clientX - rect.left;
@@ -83,10 +94,11 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
         width: "100%",
         height: "100%",
         overflow: "hidden",
-        background: "#0b1020",
+        background: "var(--bg)",
         userSelect: panning.current ? "none" : undefined,
+        cursor: panning.current ? "grabbing" : "grab",
       }}
-      title="Pan: rueda o Ctrl+arrastrar | Zoom: rueda | Click: acción del padre"
+      title="Pan: arrastrá el espacio vacío, rueda o Ctrl+arrastrar | Zoom: rueda | Click: acción del padre"
     >
       <div
         style={{
@@ -98,9 +110,10 @@ export default function Sheet({ children, onCanvasClick, onCameraChange }) {
           width: COLS * CELL,
           height: ROWS * CELL,
           background:
-            "linear-gradient(#182032 1px, transparent 1px), linear-gradient(90deg, #182032 1px, transparent 1px)",
+            "linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px)",
           backgroundSize: `${CELL}px ${CELL}px`,
-          border: "1px solid #26314d",
+          backgroundColor: "var(--surface-1)",
+          border: "1px solid var(--border-strong)",
           borderRadius: 12,
           overflow: "hidden",
         }}

@@ -70,8 +70,8 @@ export const deleteClass = async (classId) => {
 export const updateClassPosition = (classId, { x_grid, y_grid }) =>
   updateClass(classId, { x_grid, y_grid });
 
-export const updateClassSize = (classId, { w_grid, h_grid }) =>
-  updateClass(classId, { w_grid, h_grid });
+export const updateClassSize = (classId, { w_grid, h_grid, x_grid, y_grid }) =>
+  updateClass(classId, { w_grid, h_grid, ...(x_grid !== undefined ? { x_grid } : {}), ...(y_grid !== undefined ? { y_grid } : {}) });
 
 export const updateClassZ = (classId, z_index) =>
   updateClass(classId, { z_index });

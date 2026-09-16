@@ -28,6 +28,28 @@ export default function ConnectionLayer({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
+  // Las líneas leen la posición de cada clase directo del DOM
+  // (getAnchorForClassSide → getBoundingClientRect), así que mientras se
+  // arrastra o redimensiona una clase no alcanza con que cambien `classes`
+  // o `camera`: hay que forzar un re-render en cada frame de movimiento
+  // para que la relación siga a la tabla en vivo, no recién al soltar.
+  const [geometryTick, forceTick] = useState(0);
+  useEffect(() => {
+    let raf = null;
+    const onGeometryChange = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => {
+        raf = null;
+        forceTick((t) => t + 1);
+      });
+    };
+    window.addEventListener("diagram:geometry-change", onGeometryChange);
+    return () => {
+      window.removeEventListener("diagram:geometry-change", onGeometryChange);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   /** Normaliza el tipo de relación (si no viene o es inválido → ASSOCIATION) */
   const normalizeType = (t) => {
     switch ((t || "").toUpperCase()) {
@@ -83,7 +105,7 @@ export default function ConnectionLayer({
       segs.push({ ...r, a, b, recursive: r.fromId === r.toId, });
     }
     return segs;
-  }, [relations, classes, camera]);
+  }, [relations, classes, camera, geometryTick]);
 
   const tempSegment = useMemo(() => {
     if (!tempLink) return null;

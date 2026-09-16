@@ -453,14 +453,29 @@ export default function useClassesAndDetails(diagram) {
 
   // `undoable` es false cuando la tarjeta se reajusta sola al cambiar su
   // contenido (ver useAutoGrow): eso no es una acción del usuario.
-  async function handleResizeEnd(classId, { w_grid, h_grid }, { undoable = true } = {}) {
+  //
+  // Redimensionar desde el borde superior o izquierdo también mueve la
+  // posición (el borde opuesto queda fijo), así que x_grid/y_grid son
+  // opcionales acá: solo vienen cuando el handle usado los cambió.
+  async function handleResizeEnd(classId, { w_grid, h_grid, x_grid, y_grid }, { undoable = true } = {}) {
     const antes = classes.find((c) => c.id === classId);
+    const patch = { w_grid, h_grid };
+    if (x_grid !== undefined) patch.x_grid = x_grid;
+    if (y_grid !== undefined) patch.y_grid = y_grid;
     try {
-      await updateClassSize(classId, { w_grid, h_grid });
-      setClasses((prev) => prev.map((c) => (c.id === classId ? { ...c, w_grid, h_grid } : c)));
+      await updateClassSize(classId, patch);
+      setClasses((prev) => prev.map((c) => (c.id === classId ? { ...c, ...patch } : c)));
 
-      if (undoable && antes && (antes.w_grid !== w_grid || antes.h_grid !== h_grid)) {
-        const origen = { w_grid: antes.w_grid, h_grid: antes.h_grid };
+      const cambio = antes && (
+        antes.w_grid !== w_grid || antes.h_grid !== h_grid ||
+        (x_grid !== undefined && antes.x_grid !== x_grid) ||
+        (y_grid !== undefined && antes.y_grid !== y_grid)
+      );
+      if (undoable && cambio) {
+        const origen = {
+          w_grid: antes.w_grid, h_grid: antes.h_grid,
+          x_grid: antes.x_grid, y_grid: antes.y_grid,
+        };
         pushUndo(`redimensionar ${antes.name ?? antes.nombre}`, async () => {
           await updateClassSize(classId, origen);
           setClasses((prev) => prev.map((c) => (c.id === classId ? { ...c, ...origen } : c)));
