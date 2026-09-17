@@ -376,7 +376,16 @@ export default function useClassesAndDetails(diagram) {
         disconnect();
       };
     }
-  }, [diagram]);
+    // Depende de diagram?.id (string estable), NO del objeto `diagram`
+    // entero: useDiagram puede devolver un objeto nuevo con el mismo id
+    // (p.ej. si React vuelve a montar el árbol, StrictMode incluido), y
+    // con el objeto completo como dependencia eso reconectaba el
+    // WebSocket en cada uno de esos remounts -- una pestaña que se
+    // reconectaba seguido perdía cualquier mensaje que llegara justo en
+    // la ventana muerta entre cerrar y reabrir, incluidos los cursores en
+    // vivo de otro colaborador.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [diagram?.id]);
 
   // ====== EFECTO: cargar detalles al seleccionar ======
   useEffect(() => {

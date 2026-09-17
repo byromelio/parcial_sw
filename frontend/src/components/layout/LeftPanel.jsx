@@ -77,7 +77,7 @@ export default function LeftPanel({
                         whiteSpace: "nowrap",
                       }}
                     >
-                      {c.nombre}
+                      {c.name ?? c.nombre}
                     </span>
                   </button>
                 </li>
