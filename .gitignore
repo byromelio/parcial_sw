@@ -26,3 +26,9 @@ Thumbs.db
 
 # Logs de servidores de desarrollo local
 *.log
+
+# Backups locales (dumps de base de datos, proyectos de prueba)
+backups/
+
+# Cache/metadata de herramientas locales (no es código del proyecto)
+.atl/
