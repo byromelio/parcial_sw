@@ -11,6 +11,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { sendAiCommand } from "../../api/ai";
+import { transcribeAudio } from "../../api/voice";
 import { onEvent } from "../../api/realtime";
 import Icon from "../common/Icon";
 
@@ -21,18 +22,15 @@ const EJEMPLOS = [
   "Ponele a Pedido un atributo total de tipo Double",
 ];
 
-const SpeechRecognitionApi =
-  typeof window !== "undefined"
-    ? window.SpeechRecognition || window.webkitSpeechRecognition
-    : null;
-
 export default function AiAssistantPanel({ diagramId }) {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [log, setLog] = useState([]); // {role: 'user'|'assistant'|'error', text}
   const [busy, setBusy] = useState(false);
   const [listening, setListening] = useState(false);
-  const recognitionRef = useRef(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
   const logEndRef = useRef(null);
 
   // ---- Resultados del asistente (llegan por WebSocket) ----
@@ -74,32 +72,64 @@ export default function AiAssistantPanel({ diagramId }) {
     }
   };
 
-  const toggleVoice = () => {
-    if (!SpeechRecognitionApi) {
+  // Graba audio con MediaRecorder y lo manda al backend para que Gemini lo
+  // transcriba (ver api/voice.js). No usa la Web Speech API del navegador:
+  // esa transcribe del lado del cliente contra los servidores de Google y
+  // en la práctica es inestable (solo Chromium, falla sin aviso claro).
+  // Acá el audio grabado se sube como archivo y el texto que vuelve entra
+  // al mismo flujo que un comando escrito a mano.
+  const toggleVoice = async () => {
+    if (listening) {
+      mediaRecorderRef.current?.stop();
+      return;
+    }
+    if (!navigator.mediaDevices?.getUserMedia) {
       setLog((prev) => [
         ...prev,
-        { role: "error", text: "Este navegador no reconoce voz. Probá con Google Chrome." },
+        { role: "error", text: "Este navegador no permite grabar audio." },
       ]);
       return;
     }
-    if (listening) {
-      recognitionRef.current?.stop();
+
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch {
+      setLog((prev) => [
+        ...prev,
+        { role: "error", text: "No se pudo acceder al micrófono. Revisá los permisos del navegador." },
+      ]);
       return;
     }
 
-    const rec = new SpeechRecognitionApi();
-    rec.lang = "es-ES";
-    rec.interimResults = false;
-    rec.maxAlternatives = 1;
-    rec.onstart = () => setListening(true);
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
-    rec.onresult = (e) => {
-      const transcript = e.results?.[0]?.[0]?.transcript;
-      if (transcript) send(transcript);
+    const recorder = new MediaRecorder(stream);
+    audioChunksRef.current = [];
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) audioChunksRef.current.push(e.data);
     };
-    recognitionRef.current = rec;
-    rec.start();
+    recorder.onstop = async () => {
+      stream.getTracks().forEach((t) => t.stop());
+      setListening(false);
+
+      const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
+      if (blob.size === 0) return;
+
+      setTranscribing(true);
+      try {
+        const transcript = await transcribeAudio(blob);
+        if (transcript) send(transcript);
+      } catch (err) {
+        const detail =
+          err?.response?.data?.detail || "No se pudo transcribir el audio.";
+        setLog((prev) => [...prev, { role: "error", text: detail }]);
+      } finally {
+        setTranscribing(false);
+      }
+    };
+
+    mediaRecorderRef.current = recorder;
+    recorder.start();
+    setListening(true);
   };
 
   // ---------------- Botón flotante (cerrado) ----------------
@@ -247,16 +277,22 @@ export default function AiAssistantPanel({ diagramId }) {
           value={text}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder={listening ? "Escuchando…" : "Ej: creá una clase Factura"}
-          disabled={busy}
+          placeholder={
+            listening
+              ? "Grabando… tocá el micrófono de nuevo para terminar"
+              : transcribing
+              ? "Transcribiendo…"
+              : "Ej: creá una clase Factura"
+          }
+          disabled={busy || transcribing}
         />
         <button
           className={`btn btn-icon ${listening ? "btn-active" : ""}`}
           onClick={toggleVoice}
-          disabled={busy}
-          title="Dictar por voz"
+          disabled={busy || transcribing}
+          title={listening ? "Detener grabación" : "Dictar por voz"}
         >
-          <Icon name="mic" />
+          <Icon name={transcribing ? "loader" : "mic"} className={transcribing ? "spinning" : ""} />
         </button>
         <button
           className="btn btn-primary btn-icon"
