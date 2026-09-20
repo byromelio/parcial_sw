@@ -1,0 +1,57 @@
+name: uml_collab_mobile
+description: >
+  App móvil del editor colaborativo de diagramas de clases UML. Habla con el
+  mismo backend FastAPI que la versión web (mismos diagramas, misma
+  colaboración en tiempo real), y agrega un asistente de edición por voz o
+  texto que corre 100% offline: reconocimiento de voz con Vosk y un modelo de
+  lenguaje chico (Qwen2.5-1.5B-Instruct, cuantizado) corriendo en el propio
+  teléfono con llama.cpp. No depende de ningún proveedor de IA en la nube.
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # ---- Red / estado ----
+  http: ^1.2.2
+  web_socket_channel: ^3.0.1
+  provider: ^6.1.2
+  shared_preferences: ^2.3.2
+
+  # ---- IA local ----
+  # LLM local (GGUF vía llama.cpp) con soporte de tool-calling/salida
+  # estructurada, que es lo que necesitamos para que el modelo elija qué
+  # función de la API llamar (create_class, add_attribute, etc.) en vez de
+  # solo charlar.
+  llamadart: 0.5.4
+  # Reconocimiento de voz offline (modelo español chico, ~50MB).
+  vosk_flutter_2: ^1.0.5
+
+  # ---- Utilidades ----
+  path_provider: ^2.1.4
+  permission_handler: ^11.3.1
+  uuid: ^4.5.1
+  intl: ^0.19.0
+  # Descomprimir el .zip del modelo Vosk descargado en tiempo de ejecución.
+  archive: ^3.6.1
+  collection: ^1.18.0
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # El modelo Vosk español y el GGUF del LLM NO se versionan en git (pesan
+    # demasiado): se descargan la primera vez que se abre el asistente, a
+    # una carpeta local del dispositivo. Ver lib/services/model_downloader.dart.
+    - assets/config/
