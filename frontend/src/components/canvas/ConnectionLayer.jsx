@@ -16,7 +16,7 @@ export default function ConnectionLayer({
   tempLink = null,
   relations = [],
   strokeColor = DEFAULT_COLOR,
-  strokeWidth = 2,
+  strokeWidth = 1.4,
   camera,
   selectedRelId = null,
   onSelectRelation,
@@ -92,11 +92,11 @@ export default function ConnectionLayer({
 
   const labelOffset = (side) => {
     switch (side) {
-      case "left": return { dx: -14, dy: -6, anchor: "end" };
-      case "right": return { dx: 14, dy: -6, anchor: "start" };
-      case "top": return { dx: 0, dy: -10, anchor: "middle" };
-      case "bottom": return { dx: 0, dy: 18, anchor: "middle" };
-      default: return { dx: 10, dy: -6, anchor: "start" };
+      case "left": return { dx: -10, dy: -5, anchor: "end" };
+      case "right": return { dx: 10, dy: -5, anchor: "start" };
+      case "top": return { dx: 0, dy: -8, anchor: "middle" };
+      case "bottom": return { dx: 0, dy: 15, anchor: "middle" };
+      default: return { dx: 8, dy: -5, anchor: "start" };
     }
   };
 
@@ -163,7 +163,7 @@ export default function ConnectionLayer({
             de esa caja y colapsa a 0px en ese eje, recortando toda la
             línea en vez de solo agregarle sombra. */}
         <filter id="rel-glow" filterUnits="userSpaceOnUse" x="-20" y="-20" width="10000" height="10000">
-          <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor={SELECTED_COLOR} floodOpacity="0.55" />
+          <feDropShadow dx="0" dy="0" stdDeviation="2" floodColor={SELECTED_COLOR} floodOpacity="0.55" />
         </filter>
 
         {/* Marcadores por color: uno para el trazo normal y otro para la
@@ -173,16 +173,16 @@ export default function ConnectionLayer({
           { suffix: "-sel", color: SELECTED_COLOR },
         ].map(({ suffix, color }) => (
           <g key={suffix || "default"}>
-            <marker id={`arrow-normal${suffix}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+            <marker id={`arrow-normal${suffix}`} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
               <path d="M 0 0.5 L 9 5 L 0 9.5 z" fill={color} />
             </marker>
-            <marker id={`arrow-hollow${suffix}`} viewBox="0 0 22 16" refX="20" refY="8" markerWidth="15" markerHeight="11" orient="auto-start-reverse">
+            <marker id={`arrow-hollow${suffix}`} viewBox="0 0 22 16" refX="20" refY="8" markerWidth="10" markerHeight="7.5" orient="auto-start-reverse">
               <path d="M 1 8 L 20 1 L 20 15 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
             </marker>
-            <marker id={`diamond-hollow${suffix}`} viewBox="0 0 24 14" refX="22" refY="7" markerWidth="17" markerHeight="10" orient="auto-start-reverse">
+            <marker id={`diamond-hollow${suffix}`} viewBox="0 0 24 14" refX="22" refY="7" markerWidth="11" markerHeight="6.5" orient="auto-start-reverse">
               <path d="M 1 7 L 12 1 L 23 7 L 12 13 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
             </marker>
-            <marker id={`diamond-filled${suffix}`} viewBox="0 0 24 14" refX="22" refY="7" markerWidth="17" markerHeight="10" orient="auto-start-reverse">
+            <marker id={`diamond-filled${suffix}`} viewBox="0 0 24 14" refX="22" refY="7" markerWidth="11" markerHeight="6.5" orient="auto-start-reverse">
               <path d="M 1 7 L 12 1 L 23 7 L 12 13 z" fill={color} />
             </marker>
           </g>
@@ -236,14 +236,14 @@ export default function ConnectionLayer({
 
         const labels = (
           <>
-            <text x={seg.a.x + so.dx} y={seg.a.y + so.dy} fontSize="12" textAnchor={so.anchor} style={labelStyle}>
+            <text x={seg.a.x + so.dx} y={seg.a.y + so.dy} fontSize="10" textAnchor={so.anchor} style={labelStyle}>
               {fmtMult(seg.srcMin, seg.srcMax)}
             </text>
-            <text x={seg.b.x + dof.dx} y={seg.b.y + dof.dy} fontSize="12" textAnchor={dof.anchor} style={labelStyle}>
+            <text x={seg.b.x + dof.dx} y={seg.b.y + dof.dy} fontSize="10" textAnchor={dof.anchor} style={labelStyle}>
               {fmtMult(seg.dstMin, seg.dstMax)}
             </text>
             {seg.label && (
-              <text x={mid.x} y={mid.y - 6} fontSize="12" textAnchor="middle" style={labelStyle}>
+              <text x={mid.x} y={mid.y - 6} fontSize="10" textAnchor="middle" style={labelStyle}>
                 {seg.label}
               </text>
             )}
