@@ -1,1 +1,36 @@
-// Template: docker-compose.yml.j2
+services:
+  db:
+    image: postgres:16
+    container_name: {{ artifactId }}-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: {{ db_name }}
+      POSTGRES_USER: {{ db_user }}
+      POSTGRES_PASSWORD: {{ db_pass }}
+    ports:
+      - "5434:5432"
+    volumes:
+      - {{ artifactId }}_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U {{ db_user }} -d {{ db_name }}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: {{ artifactId }}-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: "5432"
+    ports:
+      - "8090:8090"
+
+volumes:
+  {{ artifactId }}_pgdata:

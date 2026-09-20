@@ -46,6 +46,22 @@ def generate_postman(json_path, output_dir):
     test_bodies_dir = os.path.join(output_dir, "test_bodies")
     os.makedirs(test_bodies_dir, exist_ok=True)
 
+    # Una sola coleccion con todas las clases agrupadas en carpetas: mas
+    # comodo para importar en Postman de una vez en lugar de un archivo por
+    # clase. Los archivos sueltos en test_bodies/ se siguen generando igual,
+    # por si se quiere importar solo el CRUD de una clase puntual.
+    all_folders = [
+        {
+            "name": "Health",
+            "item": [
+                {
+                    "name": "Health check",
+                    "request": {"method": "GET", "url": build_url("http://localhost:8090/")},
+                }
+            ],
+        }
+    ]
+
     for c in diagram["classes"]:
         class_name = c["name"]
         url_base = f"http://localhost:8090/api/{class_name.lower()}s"
@@ -115,4 +131,22 @@ def generate_postman(json_path, output_dir):
         with open(file_path, "w", encoding="utf-8") as f:
             json.dump(model_collection, f, indent=2, ensure_ascii=False)
 
-        print(f"📄 CRUD Postman generado: {file_path}")
+        all_folders.append({"name": class_name, "item": requests})
+
+        print(f"CRUD Postman generado: {file_path}")
+
+    # Coleccion unica con todas las clases, lista para importar y correr
+    # directo contra el backend generado (levantalo antes con
+    # docker-compose up y ./mvnw spring-boot:run, ver README del ZIP).
+    full_collection = {
+        "info": {
+            "name": f"{diagram.get('title', 'Backend generado')} - API",
+            "description": "Generado automaticamente a partir del diagrama UML. Requiere el backend Spring Boot corriendo en localhost:8090 (ver README.md del proyecto exportado).",
+            "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+        },
+        "item": all_folders,
+    }
+    full_path = os.path.join(output_dir, "postman_collection.json")
+    with open(full_path, "w", encoding="utf-8") as f:
+        json.dump(full_collection, f, indent=2, ensure_ascii=False)
+    print(f"Coleccion Postman unificada generada: {full_path}")

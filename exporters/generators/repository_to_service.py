@@ -25,4 +25,4 @@ def generate_services(json_path, output_dir, templates_dir="../templates"):
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(code)
 
-        print(f"✅ Generado service: {file_path}")
+        print(f"Generado service: {file_path}")

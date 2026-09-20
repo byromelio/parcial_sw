@@ -10,11 +10,11 @@ public class {{ class_name }}Dto {
 {% endfor %}
 
 {% for attr in attributes %}
-    public {{ attr.type }} get{{ attr.name|capitalize }}() {
+    public {{ attr.type }} get{{ attr.name[0]|upper }}{{ attr.name[1:] }}() {
         return {{ attr.name }};
     }
 
-    public void set{{ attr.name|capitalize }}({{ attr.type }} {{ attr.name }}) {
+    public void set{{ attr.name[0]|upper }}{{ attr.name[1:] }}({{ attr.type }} {{ attr.name }}) {
         this.{{ attr.name }} = {{ attr.name }};
     }
 {% endfor %}

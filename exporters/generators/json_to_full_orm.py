@@ -1,8 +1,7 @@
-#json_to_full_orm.js
 """
 json_to_full_orm.py
-Convierte un diagrama UML (JSON) a entidades Java con JPA.
-👉 Combina atributos (de json_to_orm) + relaciones (de json_to_relations).
+Convierte un diagrama UML (JSON) a entidades Java con JPA: atributos y
+relaciones (usando json_to_relations) en un solo generador.
 """
 
 import os, json
@@ -273,4 +272,4 @@ def generate_from_json(json_path: str, output_dir=None):
         file_path = os.path.join(output_dir, f"{c['name']}.java")
         with open(file_path, "w", encoding="utf-8") as f:
             f.write(code)
-        print(f"✅ Generada entidad con relaciones: {file_path}")
+        print(f"Generada entidad con relaciones: {file_path}")

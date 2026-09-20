@@ -5,10 +5,21 @@ Lee el JSON y genera un mapa de relaciones con anotaciones JPA sugeridas.
 """
 
 import json
+import re
+
+# Cualquier caracter que no sea letra/digito se trata como separador de
+# palabra. Necesario porque el nombre de un atributo puede venir de una
+# foto leida por Gemini con puntuacion pegada (ej. "account no." como
+# abreviatura de "account number"), y un "." (o cualquier otro simbolo)
+# en un identificador Java ni siquiera compila.
+_WORD_SPLIT_RE = re.compile(r"[^0-9a-zA-Z]+")
+
 
 def to_camel(name: str) -> str:
-    """Convierte nombres a camelCase: UnidadMedida → unidadMedida, unidad_medida → unidadMedida"""
-    parts = name.replace("-", "_").split("_")
+    """Convierte nombres a camelCase: 'UnidadMedida' -> 'unidadMedida',
+    'unidad_medida' -> 'unidadMedida', 'transaction id' -> 'transactionId',
+    'account no.' -> 'accountNo'."""
+    parts = [p for p in _WORD_SPLIT_RE.split(name) if p]
     if not parts:
         return name
     return parts[0].lower() + "".join(p.capitalize() for p in parts[1:])
