@@ -1,5 +1,3 @@
-
-#     return user
 from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -16,7 +14,6 @@ bearer = HTTPBearer(auto_error=False)
 # ========================
 # Password helpers
 # ========================
- 
 
 def hash_password(password: str) -> str:
     return bcrypt.hash(password[:72])   # corta a 72 chars

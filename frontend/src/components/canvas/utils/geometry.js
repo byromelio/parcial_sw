@@ -83,13 +83,6 @@ export function getAnchorsForRelation(type, fromId, toId, srcA = "right", dstA =
         a: getAnchorForClassSide(fromId, "bottom"),
         b: getAnchorForClassSide(toId, "top"),
       };
-    // case "AGGREGATION":
-    // case "COMPOSITION":
-    //   // Rombo en el origen, flecha al destino
-    //   return {
-    //     a: getAnchorForClassSide(fromId, "right"),
-    //     b: getAnchorForClassSide(toId, "left"),
-    //   };
     case "AGGREGATION":
     case "COMPOSITION":
       // Línea desde origen → DESTINO (rombo en el destino)
