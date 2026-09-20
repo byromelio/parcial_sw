@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import time
 
 from google import genai
@@ -31,7 +32,28 @@ from app.schemas.vision import DetectedAttribute, DetectedClass, DetectedRelatio
 
 logger = logging.getLogger(__name__)
 
+# Formato que entiende _parse_multiplicity en ai_tools.py: "*", un entero
+# solo, o "N..M"/"N..*". Una foto real trae letra manuscrita variable, y
+# Gemini a veces transcribe cosas como "1,2" (coma en vez de rango) o "1 2"
+# que rompen ese parser con un ValueError sin capturar. Mejor descartar acá
+# lo que no matchea a None (el backend ya usa 1 como default) que dejar que
+# reviente la creacion del diagrama entero por una multiplicidad rara.
+_MULTIPLICITY_RE = re.compile(r"^\*$|^\d+$|^\d+\.\.(\d+|\*)$")
+
+
+def _normalize_multiplicity(value: str | None) -> str | None:
+    if not value:
+        return None
+    value = value.strip()
+    if _MULTIPLICITY_RE.match(value):
+        return value
+    logger.warning(f"[vision] multiplicidad no reconocida, se descarta: {value!r}")
+    return None
+
 MODEL = "gemini-3.5-flash"  # mejor lectura de imagen que el -lite para este caso
+# Respaldo si el modelo principal esta saturado (503 sostenido): el -lite
+# suele tener menos demanda y sigue leyendo imagenes razonablemente bien.
+FALLBACK_MODEL = "gemini-3.5-flash-lite"
 REQUEST_TIMEOUT = 60.0
 
 SYSTEM_PROMPT = """Sos un asistente que transcribe un diagrama de clases UML \
@@ -121,37 +143,61 @@ def detect_from_image(image_bytes: bytes, mime_type: str) -> VisionDetectResult:
 
     client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
+    def call(model: str):
+        return client.models.generate_content(
+            model=model,
+            contents=[
+                SYSTEM_PROMPT,
+                types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+            ],
+            config=types.GenerateContentConfig(
+                response_mime_type="application/json",
+                response_schema=_RESPONSE_SCHEMA,
+                http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT * 1000)),
+            ),
+        )
+
+    def is_unavailable(e: Exception) -> bool:
+        return "UNAVAILABLE" in str(e) or "503" in str(e)
+
     # La capa gratuita de Gemini devuelve 503 "high demand" con bastante
     # frecuencia y es tipicamente transitorio (segundos): un par de
     # reintentos cortos con backoff evitan mandar al usuario un error por
-    # algo que se resuelve solo con otro intento inmediato.
+    # algo que se resuelve solo con otro intento inmediato. Si el modelo
+    # principal sigue saturado despues de esos reintentos, se intenta una
+    # vez mas con el modelo -lite (menos demanda) antes de rendirse.
+    response = None
     last_error: Exception | None = None
     max_attempts = 4
     for attempt in range(max_attempts):
         try:
-            response = client.models.generate_content(
-                model=MODEL,
-                contents=[
-                    SYSTEM_PROMPT,
-                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
-                ],
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=_RESPONSE_SCHEMA,
-                    http_options=types.HttpOptions(timeout=int(REQUEST_TIMEOUT * 1000)),
-                ),
-            )
+            response = call(MODEL)
             break
         except Exception as e:
             last_error = e
-            is_unavailable = "UNAVAILABLE" in str(e) or "503" in str(e)
-            if not is_unavailable or attempt == max_attempts - 1:
+            if not is_unavailable(e):
                 raise
+            if attempt == max_attempts - 1:
+                # Se agotaron los reintentos con el modelo principal: no
+                # relanzar todavia, dejar que caiga al fallback de abajo.
+                break
             wait_s = 3 * (attempt + 1)
-            logger.warning(f"[vision] intento {attempt + 1} fallo (503), reintentando en {wait_s}s...")
+            logger.warning(f"[vision] intento {attempt + 1} con {MODEL} fallo (503), reintentando en {wait_s}s...")
             time.sleep(wait_s)
-    else:
-        raise last_error
+
+    if response is None:
+        if last_error is not None and is_unavailable(last_error):
+            logger.warning(f"[vision] {MODEL} saturado, probando fallback {FALLBACK_MODEL}...")
+            try:
+                response = call(FALLBACK_MODEL)
+            except Exception as e:
+                if is_unavailable(e):
+                    raise RuntimeError(
+                        "El servicio de IA está con mucha demanda en este momento. Probá de nuevo en un minuto."
+                    ) from e
+                raise
+        else:
+            raise last_error
 
     raw = response.text or "{}"
     try:
@@ -182,8 +228,8 @@ def detect_from_image(image_bytes: bytes, mime_type: str) -> VisionDetectResult:
             to_class=r["to_class"].strip(),
             type=(r.get("type") or "ASSOCIATION").strip().upper(),
             label=(r.get("label") or "").strip() or None,
-            src_multiplicity=(r.get("src_multiplicity") or "").strip() or None,
-            dst_multiplicity=(r.get("dst_multiplicity") or "").strip() or None,
+            src_multiplicity=_normalize_multiplicity(r.get("src_multiplicity")),
+            dst_multiplicity=_normalize_multiplicity(r.get("dst_multiplicity")),
         )
         for r in data.get("relations", [])
         if r.get("from_class") and r.get("to_class")

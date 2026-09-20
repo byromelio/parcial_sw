@@ -49,7 +49,8 @@ async def detect(
     try:
         result = detect_from_image(content, content_type)
     except RuntimeError as e:
-        raise HTTPException(400, str(e))
+        status = 503 if "mucha demanda" in str(e) else 400
+        raise HTTPException(status, str(e))
     except Exception as e:
         logger.error(f"[vision] fallo detectando diagrama: {type(e).__name__}: {e}")
         raise HTTPException(502, describe_error(e))
@@ -113,6 +114,11 @@ def apply(
             summary.relations_created += 1
         except ToolError as e:
             summary.warnings.append(str(e))
+        except ValueError as e:
+            # Multiplicidad u otro dato con un formato que el parser no
+            # entiende: no debe tirar abajo la creacion de todo el
+            # diagrama por una sola relacion con lectura rara de la foto.
+            summary.warnings.append(f"No se pudo crear la relación {r.from_class} → {r.to_class}: {e}")
 
     logger.info(
         f"[vision apply] diagram_id={diagram.id} user={me.id} "
