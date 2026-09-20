@@ -1,4 +1,3 @@
-
 // src/hooks/useClassesAndDetails.js
 import { useEffect, useState } from "react";
 import {
@@ -10,12 +9,12 @@ import {
   updateClassSize,
   listAttributes,
   listMethods,
-  createAttribute,   // ✅ IMPORTAR
-  updateAttribute,   // ✅ IMPORTAR
-  deleteAttribute,   // ✅ IMPORTAR
-  createMethod,      // ✅ IMPORTAR
-  updateMethod,      // ✅ IMPORTAR
-  deleteMethod,      // ✅ IMPORTAR
+  createAttribute,
+  updateAttribute,
+  deleteAttribute,
+  createMethod,
+  updateMethod,
+  deleteMethod,
 } from "../api/classes";
 import useDebouncedCallback from "./useDebouncedCallback";
 import { connect, disconnect, onEvent as subscribe } from "../api/realtime";
@@ -28,6 +27,23 @@ function nextFreeName(base, taken) {
   let i = 2;
   while (usados.includes(`${base}${i}`)) i++;
   return `${base}${i}`;
+}
+
+function normalizeAttr(a) {
+  return {
+    ...a,
+    name: a.name ?? a.nombre,
+    type: a.type ?? a.tipo,
+    required: a.required ?? a.requerido,
+  };
+}
+
+function normalizeMeth(m) {
+  return {
+    ...m,
+    name: m.name ?? m.nombre,
+    return_type: m.return_type ?? m.tipo_retorno,
+  };
 }
 
 export default function useClassesAndDetails(diagram) {
@@ -77,13 +93,14 @@ export default function useClassesAndDetails(diagram) {
     }
   }
 
-  // // ====== Helpers ======
-  // function replaceDetails(classId, patch) {
-  //   setDetailsByClass((prev) => ({
-  //     ...prev,
-  //     [classId]: { ...(prev[classId] || { attrs: [], meths: [] }), ...patch },
-  //   }));
-  // }
+  // ====== Helpers ======
+  function replaceDetails(classId, patch) {
+    setDetailsByClass((prev) => ({
+      ...prev,
+      [classId]: { ...(prev[classId] || { attrs: [], meths: [] }), ...patch },
+    }));
+  }
+
   // ====== EFECTO PRINCIPAL ======
   useEffect(() => {
     if (diagram) {
@@ -106,21 +123,15 @@ export default function useClassesAndDetails(diagram) {
         );
       });
 
-      // onEvent("class.updated", (c) => {
-      //   setClasses((prev) => prev.map((x) => (x.id === c.id ? { ...x, ...c } : x)));
-
-      // });
       onEvent("class.updated", (c) => {
         const normalized = {
           ...c,
-          name: c.name ?? c.nombre, // 👈 si viene "nombre", lo copiamos a "name"
+          name: c.name ?? c.nombre, // si viene "nombre", lo copiamos a "name"
         };
-
         setClasses((prev) =>
           prev.map((x) => (x.id === normalized.id ? { ...x, ...normalized } : x))
         );
       });
-
 
       onEvent("class.deleted", ({ id }) => {
         setClasses((prev) => prev.filter((x) => x.id !== id));
@@ -131,69 +142,8 @@ export default function useClassesAndDetails(diagram) {
         });
         if (selectedId === id) setSelectedId(null);
       });
+
       // ====== Eventos de atributos ======
-      // onEvent("attribute.created", (a) => {
-      //   console.log("📩 WS atributo creado:", a);
-      //   replaceDetails(a.clase_id || a.class_id, {
-      //     attrs: [a, ...(detailsByClass[a.clase_id || a.class_id]?.attrs || [])],
-      //   });
-      // });
-      // // ✅ CREAR
-      // onEvent("attribute.created", (a) => {
-      //   console.log("📩 WS atributo creado:", a);
-      //   setDetailsByClass((prev) => {
-      //     const current = prev[a.clase_id]?.attrs || [];
-      //     return {
-      //       ...prev,
-      //       [a.clase_id]: {
-      //         ...(prev[a.clase_id] || { attrs: [], meths: [] }),
-      //         attrs: [...current, a], // acumula
-      //       },
-      //     };
-      //   });
-      // });
-
-      // // ✅ ACTUALIZAR
-      // onEvent("attribute.updated", (a) => {
-      //   console.log("✏️ WS atributo actualizado:", a);
-      //   setDetailsByClass((prev) => {
-      //     const next = (prev[a.clase_id]?.attrs || []).map((x) =>
-      //       x.id === a.id ? a : x
-      //     );
-      //     return {
-      //       ...prev,
-      //       [a.clase_id]: {
-      //         ...(prev[a.clase_id] || { attrs: [], meths: [] }),
-      //         attrs: next,
-      //       },
-      //     };
-      //   });
-      // });
-
-      // // ✅ ELIMINAR
-      // onEvent("attribute.deleted", ({ id, clase_id }) => {
-      //   console.log("🗑️ WS atributo eliminado:", id);
-      //   setDetailsByClass((prev) => {
-      //     const next = (prev[clase_id]?.attrs || []).filter((x) => x.id !== id);
-      //     return {
-      //       ...prev,
-      //       [clase_id]: {
-      //         ...(prev[clase_id] || { attrs: [], meths: [] }),
-      //         attrs: next,
-      //       },
-      //     };
-      //   });
-      // });
-      function normalizeAttr(a) {
-        return {
-          ...a,
-          name: a.name ?? a.nombre,
-          type: a.type ?? a.tipo,
-          required: a.required ?? a.requerido,
-        };
-      }
-
-      // ✅ CREAR
       onEvent("attribute.created", (a) => {
         const attr = normalizeAttr(a);
         setDetailsByClass((prev) => {
@@ -209,10 +159,8 @@ export default function useClassesAndDetails(diagram) {
         });
       });
 
-      // ✅ ACTUALIZAR
       onEvent("attribute.updated", (a) => {
         const attr = normalizeAttr(a);
-        console.log("✏️ WS atributo actualizado:", attr);
         setDetailsByClass((prev) => {
           const next = (prev[attr.clase_id]?.attrs || []).map((x) =>
             x.id === attr.id ? attr : x
@@ -227,9 +175,7 @@ export default function useClassesAndDetails(diagram) {
         });
       });
 
-      // ✅ ELIMINAR
       onEvent("attribute.deleted", ({ id, clase_id }) => {
-        console.log("🗑️ WS atributo eliminado:", id);
         setDetailsByClass((prev) => {
           const next = (prev[clase_id]?.attrs || []).filter((x) => x.id !== id);
           return {
@@ -242,84 +188,7 @@ export default function useClassesAndDetails(diagram) {
         });
       });
 
-
       // ====== Eventos de métodos ======
-      // onEvent("method.created", (m) => {
-      //   console.log("📩 WS método creado:", m);
-      //   replaceDetails(m.clase_id || m.class_id, {
-      //     meths: [m, ...(detailsByClass[m.clase_id || m.class_id]?.meths || [])],
-      //   });
-      // });
-
-      // onEvent("method.updated", (m) => {
-      //   console.log("📩 WS método actualizado:", m);
-      //   const next = (detailsByClass[m.clase_id || m.class_id]?.meths || [])
-      //     .map((x) => (x.id === m.id ? m : x));
-      //   replaceDetails(m.clase_id || m.class_id, { meths: next });
-      // });
-
-      // onEvent("method.deleted", ({ clase_id, class_id, id }) => {
-      //   console.log("📩 WS método eliminado:", { clase_id, class_id, id });
-      //   const cid = clase_id || class_id;
-      //   const next = (detailsByClass[cid]?.meths || [])
-      //     .filter((x) => x.id !== id);
-      //   replaceDetails(cid, { meths: next });
-      // });
-      // // ✅ CREAR MÉTODO
-      // onEvent("method.created", (m) => {
-      //   console.log("📩 WS método creado:", m);
-      //   setDetailsByClass((prev) => {
-      //     const current = prev[m.clase_id]?.meths || [];
-      //     return {
-      //       ...prev,
-      //       [m.clase_id]: {
-      //         ...(prev[m.clase_id] || { attrs: [], meths: [] }),
-      //         meths: [...current, m], // acumula
-      //       },
-      //     };
-      //   });
-      // });
-
-      // // ✅ ACTUALIZAR MÉTODO
-      // onEvent("method.updated", (m) => {
-      //   console.log("✏️ WS método actualizado:", m);
-      //   setDetailsByClass((prev) => {
-      //     const next = (prev[m.clase_id]?.meths || []).map((x) =>
-      //       x.id === m.id ? m : x
-      //     );
-      //     return {
-      //       ...prev,
-      //       [m.clase_id]: {
-      //         ...(prev[m.clase_id] || { attrs: [], meths: [] }),
-      //         meths: next,
-      //       },
-      //     };
-      //   });
-      // });
-
-      // // ✅ ELIMINAR MÉTODO
-      // onEvent("method.deleted", ({ id, clase_id }) => {
-      //   console.log("🗑️ WS método eliminado:", { clase_id, id });
-      //   setDetailsByClass((prev) => {
-      //     const next = (prev[clase_id]?.meths || []).filter((x) => x.id !== id);
-      //     return {
-      //       ...prev,
-      //       [clase_id]: {
-      //         ...(prev[clase_id] || { attrs: [], meths: [] }),
-      //         meths: next,
-      //       },
-      //     };
-      //   });
-      // });
-
-      function normalizeMeth(m) {
-        return {
-          ...m,
-          name: m.name ?? m.nombre,
-          return_type: m.return_type ?? m.tipo_retorno,
-        };
-      }
-      // ✅ CREAR
       onEvent("method.created", (m) => {
         const meth = normalizeMeth(m);
         setDetailsByClass((prev) => {
@@ -335,10 +204,8 @@ export default function useClassesAndDetails(diagram) {
         });
       });
 
-      // ✅ ACTUALIZAR
       onEvent("method.updated", (m) => {
         const meth = normalizeMeth(m);
-        console.log("✏️ WS método actualizado:", meth);
         setDetailsByClass((prev) => {
           const next = (prev[meth.clase_id]?.meths || []).map((x) =>
             x.id === meth.id ? meth : x
@@ -353,9 +220,7 @@ export default function useClassesAndDetails(diagram) {
         });
       });
 
-      // ✅ ELIMINAR
       onEvent("method.deleted", ({ id, clase_id }) => {
-        console.log("🗑️ WS método eliminado:", id);
         setDetailsByClass((prev) => {
           const next = (prev[clase_id]?.meths || []).filter((x) => x.id !== id);
           return {
@@ -367,9 +232,6 @@ export default function useClassesAndDetails(diagram) {
           };
         });
       });
-
-
-
 
       return () => {
         offs.forEach((off) => off());
@@ -393,14 +255,6 @@ export default function useClassesAndDetails(diagram) {
       fetchDetails(selectedId);
     }
   }, [selectedId, detailsByClass]);
-
-  // ====== Helpers ======
-  function replaceDetails(classId, patch) {
-    setDetailsByClass((prev) => ({
-      ...prev,
-      [classId]: { ...(prev[classId] || { attrs: [], meths: [] }), ...patch },
-    }));
-  }
 
   // ====== Crear clase ======
   async function handleCanvasClick({ x_grid, y_grid }) {
@@ -544,6 +398,42 @@ export default function useClassesAndDetails(diagram) {
     }
   }
 
+  // ====== Clase de asociación (UML 2.5) ======
+  // Cuando una relación muchos-a-muchos tiene atributos propios (o el
+  // usuario simplemente quiere que la tabla intermedia sea explícita en el
+  // diagrama, no solo un @JoinTable invisible generado por Hibernate), se
+  // modela como una clase real conectada a ambos lados con multiplicidad 1.
+  // Acá solo se crea la clase con sus dos FKs; las dos relaciones 1-a-* que
+  // la conectan a las clases originales las arma quien llama a esto.
+  async function createAssociationClass({ nameA, nameB, xGrid, yGrid }) {
+    const usadosGlobal = classes.map((c) => (c.name ?? "").toLowerCase());
+    const baseName = `${nameA}${nameB}`.replace(/\s+/g, "");
+    const name = nextFreeName(baseName, usadosGlobal);
+
+    const created = await apiCreateClass(diagram.id, {
+      name,
+      x_grid: xGrid, y_grid: yGrid, w_grid: 12, h_grid: 6, z_index: 1,
+    });
+    await loadClasses();
+    replaceDetails(created.id, { attrs: [], meths: [] });
+
+    const attrsUsados = [];
+    const fkA = await createAttribute(created.id, {
+      name: nextFreeName(`${nameA.toLowerCase()}_id`, attrsUsados),
+      type: "integer",
+      required: true,
+    });
+    attrsUsados.push(fkA.name);
+    const fkB = await createAttribute(created.id, {
+      name: nextFreeName(`${nameB.toLowerCase()}_id`, attrsUsados),
+      type: "integer",
+      required: true,
+    });
+    replaceDetails(created.id, { attrs: [fkA, fkB] });
+
+    return created;
+  }
+
   // ====== RETORNO ======
   return {
     classes, setClasses,
@@ -559,6 +449,7 @@ export default function useClassesAndDetails(diagram) {
     handleDragEnd,
     handleResizeEnd,
     handleDelete,
+    createAssociationClass,
 
     // 🔹 atributos
     addAttr: async (classId) => {

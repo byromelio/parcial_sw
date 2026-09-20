@@ -27,9 +27,11 @@ import Inspector from "../components/panels/Inspector";
 import RelationInspector from "../components/panels/RelationInspector";
 import AiAssistantPanel from "../components/panels/AiAssistantPanel";
 import CollaboratorsModal from "../components/panels/CollaboratorsModal";
+import AssociationClassModal from "../components/panels/AssociationClassModal";
 import HelpGuide from "../components/common/HelpGuide";
 import Icon from "../components/common/Icon";
 import { exportXmi, importXmi } from "../api/xmi";
+import { deleteRelation as apiDeleteRelation } from "../api/relations";
 
 // ===== layout =====
 import HeaderBar from "../components/layout/HeaderBar";
@@ -52,6 +54,7 @@ export default function DiagramDashboard() {
   const [showHelp, setShowHelp] = useState(false);
   const [showCollaborators, setShowCollaborators] = useState(false);
   const [aviso, setAviso] = useState(null); // mensaje flotante de "deshecho"
+  const [associationCandidate, setAssociationCandidate] = useState(null); // relación M:N que puede convertirse en clase de asociación
 
   const undoLast = useUndo((s) => s.undoLast);
   const undoCount = useUndo((s) => s.stack.length);
@@ -115,6 +118,7 @@ export default function DiagramDashboard() {
     handleDelete,
     addAttr, patchAttr, removeAttr,
     addMeth, patchMeth, removeMeth,
+    createAssociationClass,
   } = useClassesAndDetails(diagram);
 
   // =====================================================
@@ -288,9 +292,72 @@ export default function DiagramDashboard() {
 
   const handleUpdateRelation = async (patch) => {
     try {
-      await updateRelation(selectedRel.id, patch);
+      const updated = await updateRelation(selectedRel.id, patch);
+
+      // UML 2.5: una asociación muchos-a-muchos con atributos propios se
+      // modela como una clase de asociación explícita, no solo como una
+      // tabla intermedia invisible generada por Hibernate. Se ofrece la
+      // conversión apenas ambos lados quedan en "*" sobre una asociación
+      // simple entre dos clases distintas (self-relaciones recursivas ya
+      // se resuelven distinto, no aplica acá).
+      //
+      // El backend devuelve esta respuesta con los nombres de campo en
+      // español del ORM (origen_id/tipo/mult_origen_max), NO con los alias
+      // en inglés que sí usa el body al crear/actualizar -- son shapes
+      // distintos a propósito de este backend, no un typo.
+      const esMuchosAMuchos =
+        updated.tipo === "ASSOCIATION" &&
+        (updated.mult_origen_max === "*" || updated.mult_origen_max === null) &&
+        (updated.mult_destino_max === "*" || updated.mult_destino_max === null) &&
+        updated.origen_id !== updated.destino_id;
+
+      if (esMuchosAMuchos) {
+        setAssociationCandidate(updated);
+      }
     } catch {
       alert("No se pudo actualizar la relación");
+    }
+  };
+
+  const convertToAssociationClass = async (relation) => {
+    const claseOrigen = classes.find((c) => c.id === relation.origen_id);
+    const claseDestino = classes.find((c) => c.id === relation.destino_id);
+    if (!claseOrigen || !claseDestino) return;
+
+    try {
+      const xGrid = Math.round((claseOrigen.x_grid + claseDestino.x_grid) / 2);
+      const yGrid = Math.round((claseOrigen.y_grid + claseDestino.y_grid) / 2) + 4;
+
+      const intermedia = await createAssociationClass({
+        nameA: claseOrigen.name,
+        nameB: claseDestino.name,
+        xGrid, yGrid,
+      });
+
+      await createRelation({
+        from_class: claseOrigen.id,
+        to_class: intermedia.id,
+        type: "ASSOCIATION",
+        src_mult_min: 1, src_mult_max: 1,
+        dst_mult_min: 0, dst_mult_max: "*",
+      });
+      await createRelation({
+        from_class: intermedia.id,
+        to_class: claseDestino.id,
+        type: "ASSOCIATION",
+        src_mult_min: 0, src_mult_max: "*",
+        dst_mult_min: 1, dst_mult_max: 1,
+      });
+
+      // Se usa el DELETE directo (no el deleteRelation del hook) porque ese
+      // ya pide su propia confirmación por diálogo, y acá el usuario ya
+      // confirmó la conversión completa un paso antes.
+      await apiDeleteRelation(relation.id);
+      setSelectedRelId(null);
+    } catch {
+      alert("No se pudo crear la clase de asociación");
+    } finally {
+      setAssociationCandidate(null);
     }
   };
 
@@ -544,6 +611,14 @@ export default function DiagramDashboard() {
           diagram={diagram}
           isOwner={diagram.owner_email === email}
           onClose={() => setShowCollaborators(false)}
+        />
+      )}
+      {associationCandidate && (
+        <AssociationClassModal
+          origenNombre={associationCandidate.origen_nombre}
+          destinoNombre={associationCandidate.destino_nombre}
+          onCancel={() => setAssociationCandidate(null)}
+          onConfirm={() => convertToAssociationClass(associationCandidate)}
         />
       )}
     </div>
