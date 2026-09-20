@@ -32,3 +32,6 @@ backups/
 
 # Cache/metadata de herramientas locales (no es código del proyecto)
 .atl/
+
+# Enterprise Architect: lock file temporal, se regenera solo al abrir el proyecto
+*.ldb
