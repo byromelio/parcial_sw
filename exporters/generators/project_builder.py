@@ -6,6 +6,7 @@ from exporters.generators.repository_to_service import generate_services
 from exporters.generators.service_to_controller import generate_controllers
 from exporters.generators.model_to_dto import generate_dtos
 from exporters.generators.postman_generator import generate_postman
+from exporters.generators.uap_generator import generate_uap
 
 TEMPLATES_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
 
@@ -24,6 +25,7 @@ def build_project(json_path: str, output_dir: str):
     src_services = os.path.join(src_main, "services")
     src_controllers = os.path.join(src_main, "controllers")
     src_dtos = os.path.join(src_main, "dtos")
+    src_uap = os.path.join(src_main, "uap")
     resources = os.path.join(output_dir, "src", "main", "resources")
 
     os.makedirs(src_main, exist_ok=True)
@@ -32,6 +34,7 @@ def build_project(json_path: str, output_dir: str):
     os.makedirs(src_services, exist_ok=True)
     os.makedirs(src_controllers, exist_ok=True)
     os.makedirs(src_dtos, exist_ok=True)
+    os.makedirs(src_uap, exist_ok=True)
     os.makedirs(resources, exist_ok=True)
 
     # 1) Generar modelos
@@ -49,10 +52,16 @@ def build_project(json_path: str, output_dir: str):
     # 5) DTOs
     generate_dtos(json_path, src_dtos, TEMPLATES_DIR)
 
-    # 6) Postman
+    # 6) Protocolo UAP (manifest/schema/tools/invoke/sync) -- se genera
+    # despues de los DTOs porque reusa el mismo modelo de atributos, y
+    # antes de Postman por si en el futuro la coleccion incluye tambien
+    # los endpoints de UAP.
+    generate_uap(json_path, src_uap, TEMPLATES_DIR)
+
+    # 7) Postman
     generate_postman(json_path, output_dir)
 
-    # 7) Archivos fijos (HealthController, pom.xml, application.properties, etc.)
+    # 8) Archivos fijos (HealthController, pom.xml, application.properties, etc.)
     health_content = render_template(
         os.path.join(TEMPLATES_DIR, "health_controller.java.j2"),
         {"groupId": "com.test"}
@@ -198,4 +207,49 @@ Y correr el backend directo con Maven, apuntando a `localhost:5434`
 ```bash
 mvn spring-boot:run
 ```
+
+## 4. Protocolo UAP (para el asistente de IA local del movil)
+
+Ademas del CRUD REST clasico (`/api/...`), este backend expone un
+protocolo de descubrimiento generico -- pensado para que un cliente que no
+conoce el dominio de antemano (por ejemplo, el asistente de IA que corre
+localmente en la app movil) pueda enterarse solo, en tiempo de ejecucion,
+que entidades y operaciones existen acá.
+
+Descubrir que hay:
+
+```bash
+curl http://localhost:8090/uap/v1/manifest
+curl http://localhost:8090/uap/v1/tools
+curl http://localhost:8090/uap/v1/schema
+```
+
+Ejecutar una operacion (ejemplo generico, el nombre de la entidad y sus
+campos van a depender del diagrama con el que se genero este backend):
+
+```bash
+curl -X POST http://localhost:8090/uap/v1/tools/create_<entidad>/invoke \\
+  -H "Content-Type: application/json" \\
+  -d '{{"clientRecordId": "un-uuid-cualquiera", "input": {{"campo": "valor"}}}}'
+```
+
+Sincronizacion (para un cliente offline-first que necesita saber que
+cambio desde la ultima vez que se conecto):
+
+```bash
+curl http://localhost:8090/uap/v1/sync/state
+curl "http://localhost:8090/uap/v1/sync/changes?since=0"
+```
+
+Notas:
+- Sin autenticacion (`GET /uap/v1/permissions` lo declara explicitamente
+  con `"mode": "open"`) -- coherente con que el CRUD REST clasico tampoco
+  la tiene.
+- `generation` (en `/uap/v1/manifest` y `/uap/v1/sync/state`) cambia cada
+  vez que se reinicia el contenedor `app` (porque `ddl-auto=create` recrea
+  el schema en cada arranque): un cliente que cachea datos localmente debe
+  descartar su cache si ese valor no coincide con el que tenia guardado.
+- El log de sincronizacion (`uap_change_log`) solo registra cambios hechos
+  A TRAVES de UAP (`/uap/v1/tools/.../invoke` o `/uap/v1/sync/push`), no
+  los hechos contra el CRUD REST clasico (`/api/...`).
 """

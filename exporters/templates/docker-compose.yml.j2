@@ -7,6 +7,13 @@ services:
       POSTGRES_DB: {{ db_name }}
       POSTGRES_USER: {{ db_user }}
       POSTGRES_PASSWORD: {{ db_pass }}
+      # Bolivia: UTC-04:00 fijo, sin horario de verano. PGTZ controla la
+      # zona horaria de las CONEXIONES nuevas a Postgres (no la del
+      # cluster en si, que Postgres siempre guarda en UTC internamente
+      # para TIMESTAMPTZ -- esto solo afecta como se muestran/interpretan
+      # los valores sin zona explicita).
+      TZ: America/La_Paz
+      PGTZ: America/La_Paz
     ports:
       - "5434:5432"
     volumes:
@@ -29,6 +36,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: "5432"
+      TZ: America/La_Paz
     ports:
       - "8090:8090"
 
