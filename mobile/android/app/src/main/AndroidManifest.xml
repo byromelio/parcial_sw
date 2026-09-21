@@ -1,8 +1,19 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Necesario para hablar con el backend (diagramador y/o backend
+         Spring Boot generado, ambos por HTTP/WebSocket). -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Necesario para el reconocimiento de voz offline con Vosk (modo
+         Alexa y el asistente del diagramador). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <!-- Usado por ConnectionManager (connectivity_plus) para detectar
+         cambios de conectividad y disparar la sincronización. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+
     <application
         android:label="uml_collab_mobile"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:usesCleartextTraffic="true">
         <activity
             android:name=".MainActivity"
             android:exported="true"

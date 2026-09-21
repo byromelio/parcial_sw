@@ -2,8 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'app_state.dart';
-import 'screens/diagram_list_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/mode_selector_screen.dart';
 
 void main() {
   runApp(
@@ -47,6 +47,6 @@ class _BootstrapperState extends State<_Bootstrapper> {
     if (!app.ready) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    return app.isLoggedIn ? const DiagramListScreen() : const LoginScreen();
+    return app.isLoggedIn ? const ModeSelectorScreen() : const LoginScreen();
   }
 }

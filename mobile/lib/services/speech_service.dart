@@ -13,9 +13,13 @@ class SpeechRecognitionService {
   Recognizer? _recognizer;
   SpeechService? _speechService;
   bool _ready = false;
+  // vosk_flutter_2 1.0.5 no expone un getter de estado en SpeechService
+  // (no existe "recognitionStarted" ni equivalente) -- se lleva el estado
+  // acá mismo, en base a las llamadas a start()/stop() que ya hacemos.
+  bool _listening = false;
 
   bool get isReady => _ready;
-  bool get isListening => _speechService?.recognitionStarted ?? false;
+  bool get isListening => _listening;
 
   /// Carga el modelo Vosk español desde una carpeta ya descargada en el
   /// dispositivo (ver ModelDownloader). Se llama una vez al abrir el
@@ -47,16 +51,19 @@ class SpeechRecognitionService {
       if (text.isNotEmpty) onFinal(text);
     });
     await _speechService!.start();
+    _listening = true;
   }
 
   Future<void> stopListening() async {
     await _speechService?.stop();
+    _listening = false;
   }
 
   Future<void> dispose() async {
     await _speechService?.stop();
+    _listening = false;
     await _recognizer?.dispose();
-    await _model?.dispose();
+    _model?.dispose(); // Model.dispose() es sincrono en vosk_flutter_2 1.0.5
     _ready = false;
   }
 

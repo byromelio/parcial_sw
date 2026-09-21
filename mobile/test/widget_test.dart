@@ -1,30 +1,28 @@
-// This is a basic Flutter widget test.
+// Smoke test de LoginScreen aislada (no de la app completa): reemplaza el
+// placeholder de "Counter increments" que dejó flutter create (esta app
+// nunca tuvo un contador) y que además no compilaba porque referenciaba
+// una clase MyApp que nunca existió en este proyecto.
 //
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
+// No se testea UmlCollabApp/main.dart de punta a punta acá porque
+// AppState() instancia SpeechRecognitionService en su declaración de
+// campo, que carga la librería nativa de Vosk (libvosk.dll/.so) al
+// construirse -- esa librería no existe en el entorno de test de
+// escritorio (ni en CI), así que cualquier widget test que construya un
+// AppState real falla por un problema de plataforma, no de lógica. Un
+// test de integración real de la app completa solo tiene sentido
+// corriendo en un dispositivo/emulador Android de verdad.
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:uml_collab_mobile/main.dart';
+import 'package:uml_collab_mobile/screens/login_screen.dart';
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  testWidgets('LoginScreen muestra el formulario de acceso', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
-
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
-
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    expect(find.text('UML Collab'), findsOneWidget);
+    expect(find.text('Ingresar'), findsOneWidget);
+    expect(find.byType(TextField), findsNWidgets(2)); // email + password
   });
 }

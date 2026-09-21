@@ -4,8 +4,12 @@ description: >
   mismo backend FastAPI que la versión web (mismos diagramas, misma
   colaboración en tiempo real), y agrega un asistente de edición por voz o
   texto que corre 100% offline: reconocimiento de voz con Vosk y un modelo de
-  lenguaje chico (Qwen2.5-1.5B-Instruct, cuantizado) corriendo en el propio
-  teléfono con llama.cpp. No depende de ningún proveedor de IA en la nube.
+  lenguaje chico (Gemma 3 1B IT, cuantizado GGUF Q4_K_M, empaquetado dentro
+  del propio APK) corriendo en el teléfono con llama.cpp. Además puede
+  conectarse a CUALQUIER backend Spring Boot generado por el diagramador
+  (protocolo UAP, ver lib/uap/) y ofrecer el mismo asistente de voz/texto
+  para operar sus datos, sin conocer su dominio de antemano. No depende de
+  ningún proveedor de IA en la nube.
 publish_to: "none"
 version: 0.1.0+1
 
@@ -40,18 +44,40 @@ dependencies:
   archive: ^3.6.1
   collection: ^1.18.0
 
+  # ---- UAP: cliente genérico + offline-first ----
+  # Persistencia local (local_records/sync_outbox/sync_metadata/identity_map,
+  # ver lib/db/) para poder listar/crear/editar/borrar sin conexión contra
+  # un backend Spring Boot generado.
+  sqflite: ^2.4.4
+  # Detecta cambios de conectividad para disparar la sincronización sin
+  # tener que hacer polling agresivo (ver lib/uap/connection_manager.dart).
+  connectivity_plus: ^7.3.1
+  # Texto a voz nativo de Android (offline, usa las voces ya instaladas en
+  # el sistema) para el modo Alexa -- Vosk sigue siendo el reconocimiento
+  # de voz (texto a voz y voz a texto son motores separados).
+  flutter_tts: ^4.2.5
+
   cupertino_icons: ^1.0.8
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  # SQLite en el test runner de escritorio (no hay un dispositivo Android
+  # real corriendo los tests): permite testear local_repository.dart con
+  # una base de datos real en vez de mockear todo el acceso a datos.
+  sqflite_common_ffi: ^2.4.3
 
 flutter:
   uses-material-design: true
 
   assets:
-    # El modelo Vosk español y el GGUF del LLM NO se versionan en git (pesan
-    # demasiado): se descargan la primera vez que se abre el asistente, a
-    # una carpeta local del dispositivo. Ver lib/services/model_downloader.dart.
-    - assets/config/
+    # El modelo Gemma 3 1B (GGUF Q4_K_M, ~700-900MB) va EMPAQUETADO acá
+    # dentro del APK -- Flutter lo copia al bundle en tiempo de build, y
+    # ensureLlmModel() (ver lib/services/model_downloader.dart) lo copia
+    # de ahí al almacenamiento privado de la app en el primer arranque. El
+    # archivo .gguf en sí NO se versiona en git (ver mobile/.gitignore):
+    # hay que descargarlo aparte antes de compilar (ver mobile/README.md).
+    # El modelo Vosk español, en cambio, sigue descargándose en runtime
+    # (pesa mucho menos, ~50MB, y no justifica inflar el APK).
+    - assets/models/

@@ -46,3 +46,9 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Modelo LLM local (Gemma 3 1B IT, GGUF Q4_K_M): pesa ~700-900MB, no entra
+# en un repo git normal. Se descarga aparte antes de compilar -- ver
+# README.md, sección "Modelo local (Gemma 3 1B)".
+/assets/models/*.gguf
+
