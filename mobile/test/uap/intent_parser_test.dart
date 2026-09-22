@@ -216,4 +216,90 @@ void main() {
     final r = parser.parse('   ');
     expect(r, isA<Rejected>());
   });
+
+  group('charla casual (no debe sonar a error)', () {
+    test('"hola" responde conversacional, no Rejected', () {
+      final r = parser.parse('hola');
+      expect(r, isA<Conversational>());
+      expect((r as Conversational).replyEs, contains('Cliente'));
+    });
+
+    test('"buenas tardes" tambien es charla casual', () {
+      final r = parser.parse('buenas tardes');
+      expect(r, isA<Conversational>());
+    });
+
+    test('"gracias" responde conversacional', () {
+      final r = parser.parse('gracias');
+      expect(r, isA<Conversational>());
+    });
+
+    test('"que podes hacer" explica las operaciones disponibles', () {
+      final r = parser.parse('que podes hacer');
+      expect(r, isA<Conversational>());
+      expect((r as Conversational).replyEs, contains('crear'));
+    });
+
+    test('"chau" se despide', () {
+      final r = parser.parse('chau');
+      expect(r, isA<Conversational>());
+    });
+
+    test('un pedido real sigue funcionando igual, no lo intercepta la charla casual', () {
+      final r = parser.parse('listar productos');
+      expect(r, isA<ParsedInvocation>());
+    });
+  });
+
+  group('contexto conversacional (multi-turno)', () {
+    test('solo la entidad, despues el verbo solo, completa la operacion', () {
+      final r1 = parser.parse('producto');
+      expect(r1, isA<NeedsClarification>());
+      final context = (r1 as NeedsClarification).context;
+      expect(context.entityKey, 'producto');
+
+      final r2 = parser.parse('listar', previous: context);
+      expect(r2, isA<ParsedInvocation>());
+      expect((r2 as ParsedInvocation).toolId, 'list_producto');
+    });
+
+    test('el bug real reportado: entidad sola -> pregunta que querés hacer -> verbo solo', () {
+      final r1 = parser.parse('cliente');
+      expect(r1, isA<NeedsClarification>());
+      final context = (r1 as NeedsClarification).context;
+      expect(context.entityKey, 'cliente');
+
+      final r2 = parser.parse('crear', previous: context, draft: LlmDraft(fields: {'nombre': 'Ana'}));
+      expect(r2, isA<ParsedInvocation>());
+      expect((r2 as ParsedInvocation).toolId, 'create_cliente');
+    });
+
+    test('con producto+crear recordados y solo falta el precio, se completa con el campo nuevo', () {
+      final r1 = parser.parse('crear producto', draft: LlmDraft(fields: {'nombre': 'Tornillo'}));
+      expect(r1, isA<NeedsClarification>());
+      final context = (r1 as NeedsClarification).context;
+      expect(context.fields['nombre'], 'Tornillo');
+
+      final r2 = parser.parse('50', previous: context, draft: LlmDraft(fields: {'precio': '50'}));
+      expect(r2, isA<ParsedInvocation>());
+      final invocation = r2 as ParsedInvocation;
+      expect(invocation.input['nombre'], 'Tornillo'); // no se perdió
+      expect(invocation.input['precio'], '50');
+    });
+
+    test('mencionar una entidad nueva en el segundo turno la reemplaza, no se queda pegado a la primera', () {
+      final r1 = parser.parse('cliente');
+      final context = (r1 as NeedsClarification).context;
+      expect(context.entityKey, 'cliente');
+
+      final r2 = parser.parse('listar productos', previous: context);
+      expect(r2, isA<ParsedInvocation>());
+      expect((r2 as ParsedInvocation).toolId, 'list_producto'); // no quedó pegado a "cliente"
+    });
+
+    test('sin contexto previo (turno nuevo), "crear" solo sigue sin sentido', () {
+      final r = parser.parse('crear');
+      expect(r, isA<Rejected>());
+    });
+  });
 }

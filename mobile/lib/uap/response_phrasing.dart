@@ -63,6 +63,7 @@ String phraseForParseResult(ParseResult result) {
   return switch (result) {
     ParsedInvocation() => 'Listo.', // no debería mostrarse, se reemplaza por phraseForResult tras ejecutar
     NeedsClarification(:final questionEs) => questionEs,
+    Conversational(:final replyEs) => replyEs,
     Rejected(:final reasonEs) => 'No pude determinar una única acción: $reasonEs',
   };
 }
