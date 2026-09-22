@@ -18,7 +18,16 @@ import '../uap/response_phrasing.dart';
 
 const _uuid = Uuid();
 
-enum _AlexaStage { idle, escuchando, interpretando, validando, esperandoConfirmacion, sincronizando, error }
+enum _AlexaStage {
+  preparando,
+  idle,
+  escuchando,
+  interpretando,
+  validando,
+  esperandoConfirmacion,
+  sincronizando,
+  error,
+}
 
 class AlexaScreen extends StatefulWidget {
   const AlexaScreen({super.key});
@@ -28,20 +37,57 @@ class AlexaScreen extends StatefulWidget {
 }
 
 class _AlexaScreenState extends State<AlexaScreen> {
-  _AlexaStage _stage = _AlexaStage.idle;
+  _AlexaStage _stage = _AlexaStage.preparando;
   String _lastResponse = '';
   bool _spanishVoiceMissing = false;
+  String _prepareLabel = 'Preparando el asistente...';
+  // Ver el mismo campo en historial_screen.dart: recuerda entidad/verbo
+  // a mitad de camino entre un turno de voz y el siguiente.
+  ConversationContext _pendingContext = const ConversationContext();
 
   @override
   void initState() {
     super.initState();
-    _checkVoice();
+    _prepare();
   }
 
-  Future<void> _checkVoice() async {
+  /// Carga Vosk (reconocimiento de voz) y el LLM local antes de habilitar
+  /// el micrófono -- sin esto, tocar el botón lanzaba "Bad state: El
+  /// reconocimiento de voz todavía no está cargado" (Vosk) o fallaba en
+  /// silencio al intentar interpretar (LLM), porque ninguno de los dos
+  /// llega cargado por defecto: cargarlos es costoso (~1GB en RAM) y no
+  /// tiene sentido hacerlo hasta que el usuario realmente entra a este
+  /// modo.
+  Future<void> _prepare() async {
     final app = context.read<AppState>();
-    final hasSpanish = await app.tts.isSpanishVoiceAvailable();
-    if (mounted) setState(() => _spanishVoiceMissing = !hasSpanish);
+    try {
+      final hasSpanish = await app.tts.isSpanishVoiceAvailable();
+      if (mounted) setState(() => _spanishVoiceMissing = !hasSpanish);
+
+      if (!app.speech.isReady) {
+        if (!await app.downloader.isVoskDownloaded()) {
+          setState(() => _prepareLabel = 'Descargando modelo de voz en español (una sola vez)...');
+          await app.downloader.downloadVosk(onProgress: (_) {});
+        }
+        setState(() => _prepareLabel = 'Cargando reconocimiento de voz...');
+        await app.speech.load(await app.downloader.voskModelPath());
+      }
+
+      if (!app.llm.isLoaded) {
+        setState(() => _prepareLabel = 'Cargando el modelo de lenguaje (puede tardar un momento)...');
+        await app.downloader.ensureLlmModel(onProgress: (_) {});
+        await app.llm.load(await app.downloader.llmModelPath());
+      }
+
+      if (mounted) setState(() => _stage = _AlexaStage.idle);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _stage = _AlexaStage.error;
+          _lastResponse = 'No pude preparar el asistente: $e';
+        });
+      }
+    }
   }
 
   Future<void> _toggleListening() async {
@@ -50,6 +96,7 @@ class _AlexaScreenState extends State<AlexaScreen> {
       await app.speech.stopListening();
       return;
     }
+    if (_stage == _AlexaStage.preparando) return;
 
     setState(() {
       _stage = _AlexaStage.escuchando;
@@ -82,24 +129,33 @@ class _AlexaScreenState extends State<AlexaScreen> {
 
     LlmDraft? draft;
     try {
-      final llmResult = await app.llm.resolveUapCommand(
+      final llmResponse = await app.llm.resolveUapCommand(
         userText: text,
         tools: contract.tools
             .map((t) => UapToolSummary(toolId: t.toolId, description: t.description, fieldNames: t.properties.keys.toList()))
             .toList(),
       );
-      draft = LlmDraft(fields: llmResult.arguments);
+      switch (llmResponse) {
+        case ChatReply(:final text):
+          // El LLM ya determinó que esto es charla, no una operación: se
+          // lee tal cual, sin pasar por el parser determinista.
+          await _respond(text);
+          return;
+        case ToolProposal(:final call):
+          draft = LlmDraft(fields: call.arguments);
+      }
     } catch (_) {
       draft = null;
     }
 
     setState(() => _stage = _AlexaStage.validando);
     final parser = IntentParser(contract);
-    final result = parser.parse(text, draft: draft);
+    final result = parser.parse(text, draft: draft, previous: _pendingContext);
 
     switch (result) {
       case ParsedInvocation(:final toolId, :final input):
         setState(() => _stage = _AlexaStage.sincronizando);
+        _pendingContext = const ConversationContext();
         try {
           final tool = contract.toolsById[toolId]!;
           final entity = contract.manifest.entities.firstWhere((e) => e.key == tool.entityKey);
@@ -108,10 +164,14 @@ class _AlexaScreenState extends State<AlexaScreen> {
         } catch (e) {
           await _respond(phraseForBackendRejected(e.toString()));
         }
-      case NeedsClarification(:final questionEs):
+      case NeedsClarification(:final questionEs, :final context):
         setState(() => _stage = _AlexaStage.esperandoConfirmacion);
+        _pendingContext = context;
         await _respond(questionEs);
+      case Conversational(:final replyEs):
+        await _respond(replyEs);
       case Rejected(:final reasonEs):
+        _pendingContext = const ConversationContext();
         await _respond('No pude determinar una única acción: $reasonEs');
     }
   }
@@ -126,6 +186,7 @@ class _AlexaScreenState extends State<AlexaScreen> {
   }
 
   String get _stageLabel => switch (_stage) {
+        _AlexaStage.preparando => _prepareLabel,
         _AlexaStage.idle => 'Tocá el micrófono para hablar',
         _AlexaStage.escuchando => 'Escuchando...',
         _AlexaStage.interpretando => 'Interpretando...',
@@ -153,17 +214,27 @@ class _AlexaScreenState extends State<AlexaScreen> {
                 ),
               ),
             const Spacer(),
-            GestureDetector(
-              onTap: _toggleListening,
-              child: CircleAvatar(
-                radius: 64,
-                backgroundColor: _stage == _AlexaStage.escuchando
-                    ? Theme.of(context).colorScheme.error
-                    : Theme.of(context).colorScheme.primary,
-                child: Icon(
-                  _stage == _AlexaStage.escuchando ? Icons.mic : Icons.mic_none,
-                  size: 56,
-                  color: Colors.white,
+            Center(
+              child: GestureDetector(
+                onTap: _stage == _AlexaStage.preparando ? null : _toggleListening,
+                child: CircleAvatar(
+                  radius: 64,
+                  backgroundColor: _stage == _AlexaStage.preparando
+                      ? Theme.of(context).colorScheme.surfaceContainerHighest
+                      : _stage == _AlexaStage.escuchando
+                          ? Theme.of(context).colorScheme.error
+                          : Theme.of(context).colorScheme.primary,
+                  child: _stage == _AlexaStage.preparando
+                      ? const SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(strokeWidth: 3),
+                        )
+                      : Icon(
+                          _stage == _AlexaStage.escuchando ? Icons.mic : Icons.mic_none,
+                          size: 56,
+                          color: Colors.white,
+                        ),
                 ),
               ),
             ),

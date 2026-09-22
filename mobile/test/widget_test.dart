@@ -1,7 +1,9 @@
-// Smoke test de LoginScreen aislada (no de la app completa): reemplaza el
-// placeholder de "Counter increments" que dejó flutter create (esta app
-// nunca tuvo un contador) y que además no compilaba porque referenciaba
-// una clase MyApp que nunca existió en este proyecto.
+// Smoke test de UapConnectScreen aislada (no de la app completa): es la
+// pantalla real de arranque de la app (ver main.dart) -- el flujo del
+// diagramador (login, lista de diagramas) no forma parte del camino
+// principal de mobile/, que existe para conectarse a un backend Spring
+// Boot generado y operarlo con el asistente, no para diseñar diagramas
+// (eso se hace desde la web).
 //
 // No se testea UmlCollabApp/main.dart de punta a punta acá porque
 // AppState() instancia SpeechRecognitionService en su declaración de
@@ -14,15 +16,23 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
-import 'package:uml_collab_mobile/screens/login_screen.dart';
+import 'package:uml_collab_mobile/app_state.dart';
+import 'package:uml_collab_mobile/screens/uap_connect_screen.dart';
 
 void main() {
-  testWidgets('LoginScreen muestra el formulario de acceso', (WidgetTester tester) async {
-    await tester.pumpWidget(const MaterialApp(home: LoginScreen()));
+  testWidgets('UapConnectScreen muestra las opciones de conexión USB y WiFi', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      ChangeNotifierProvider(
+        create: (_) => AppState(),
+        child: const MaterialApp(home: UapConnectScreen()),
+      ),
+    );
 
-    expect(find.text('UML Collab'), findsOneWidget);
-    expect(find.text('Ingresar'), findsOneWidget);
-    expect(find.byType(TextField), findsNWidgets(2)); // email + password
+    expect(find.text('Conectar a un backend generado'), findsOneWidget);
+    expect(find.text('Por USB (adb reverse)'), findsOneWidget);
+    expect(find.text('Por WiFi / LAN'), findsOneWidget);
+    expect(find.text('Conectar'), findsOneWidget);
   });
 }
