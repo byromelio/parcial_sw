@@ -95,8 +95,17 @@ export default function Sheet({ children, onCanvasClick, onCameraChange, onCurso
     if (!rect) return;
     const localX = e.clientX - rect.left;
     const localY = e.clientY - rect.top;
-    onCursorMove((localX - cam.x) / cam.z, (localY - cam.y) / cam.z);
-  }, [onCursorMove, cam.x, cam.y, cam.z]);
+    // Dividimos también por CELL, igual que handleClick: lo que viaja por el
+    // WebSocket tiene que ser coordenadas de grilla (world / CELL), no
+    // "world pixels" sin escalar -- RemoteCursor multiplica por CELL para
+    // volver a pixeles de pantalla, así que mandar world pixels acá hacía
+    // que el cursor remoto terminara CELL veces más lejos de lo real (con
+    // CELL=16, a kilómetros fuera de cualquier viewport visible).
+    onCursorMove(
+      (localX - cam.x) / cam.z / CELL,
+      (localY - cam.y) / cam.z / CELL
+    );
+  }, [onCursorMove, cam.x, cam.y, cam.z, CELL]);
 
   // Pizarra "infinita": en vez de un rectángulo de tamaño fijo, la grilla es
   // un patrón de fondo que se repite en todo el área visible y se desplaza
