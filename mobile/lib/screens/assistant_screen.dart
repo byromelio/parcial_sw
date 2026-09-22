@@ -51,9 +51,9 @@ class _AssistantScreenState extends State<AssistantScreen> {
       if (!llmDone) {
         setState(() {
           _stage = _Stage.downloading;
-          _downloadLabel = 'Descargando modelo de lenguaje (~1 GB, una sola vez)...';
+          _downloadLabel = 'Preparando modelo de lenguaje (una sola vez)...';
         });
-        await app.downloader.downloadLlm(onProgress: (p) => setState(() => _downloadProgress = p));
+        await app.downloader.ensureLlmModel(onProgress: (p) => setState(() => _downloadProgress = p));
       }
       if (!voskDone) {
         setState(() {

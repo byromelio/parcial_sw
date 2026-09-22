@@ -1,23 +1,23 @@
 // lib/services/model_downloader.dart
 //
-// El modelo GGUF del LLM (~1GB) y el modelo Vosk español (~50MB) NO viajan
-// dentro del APK: son demasiado pesados para reinstalar la app seguido
-// durante pruebas. Se descargan una sola vez a la carpeta de datos de la
-// app (path_provider) y quedan ahí entre reinstalaciones del APK que no
-// borren datos de la app (o se re-descargan si se limpiaron).
+// El modelo Vosk español (~50MB) se descarga en runtime (no justifica
+// inflar el APK). El modelo del LLM (Gemma 3 1B, GGUF Q4_K_M, ~1GB) es
+// distinto: va EMPAQUETADO dentro del APK como asset
+// (assets/models/assistant.gguf, ver pubspec.yaml), porque es la pieza
+// fija del sistema y no depende de qué backend UAP se use después --
+// ensureLlmModel() lo copia de ahí al almacenamiento privado de la app en
+// el primer arranque (llamadart necesita una ruta de archivo real en
+// disco, no puede leer directo desde el bundle de assets de Flutter).
 
 import 'dart:io';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:archive/archive_io.dart';
 
 class ModelDownloader {
-  // Qwen2.5-1.5B-Instruct, cuantización Q4_K_M: buen balance para un
-  // Snapdragon 685 sin NPU (~1GB, corre en CPU pura a unos pocos
-  // tokens/segundo, suficiente para respuestas cortas de function-calling).
-  static const llmModelUrl =
-      'https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/resolve/main/qwen2.5-1.5b-instruct-q4_k_m.gguf';
-  static const llmModelFileName = 'qwen2.5-1.5b-instruct-q4_k_m.gguf';
+  static const llmModelFileName = 'assistant.gguf';
+  static const _llmAssetPath = 'assets/models/assistant.gguf';
 
   // Modelo Vosk español chico (~50MB), del catálogo oficial alphacephei.
   static const voskModelUrl = 'https://alphacephei.com/vosk/models/vosk-model-small-es-0.42.zip';
@@ -36,38 +36,36 @@ class ModelDownloader {
   Future<bool> isLlmDownloaded() async => File(await llmModelPath()).exists();
   Future<bool> isVoskDownloaded() async => Directory(await voskModelPath()).exists();
 
-  /// Descarga el GGUF con progreso (0.0 a 1.0). Cancela y borra el archivo
-  /// parcial si algo falla a mitad de camino, para no dejar un .gguf
-  /// corrupto que después falle al cargar sin explicación.
-  Future<void> downloadLlm({required void Function(double progress) onProgress}) async {
+  /// Copia el .gguf embebido en el APK al almacenamiento privado de la
+  /// app, si todavía no está ahí. `onProgress` recibe 0.0..1.0 -- se
+  /// reporta en pasos gruesos (no hay progreso real byte a byte al leer
+  /// un asset, a diferencia de una descarga HTTP) porque rootBundle no
+  /// expone un stream de progreso.
+  Future<void> ensureLlmModel({required void Function(double progress) onProgress}) async {
+    if (await isLlmDownloaded()) {
+      onProgress(1.0);
+      return;
+    }
     final path = await llmModelPath();
-    final file = File(path);
     final tmpFile = File('$path.part');
-
-    final request = http.Request('GET', Uri.parse(llmModelUrl));
-    final response = await http.Client().send(request);
-    if (response.statusCode != 200) {
-      throw Exception('No se pudo descargar el modelo (HTTP ${response.statusCode})');
-    }
-
-    final total = response.contentLength ?? 0;
-    var received = 0;
-    final sink = tmpFile.openWrite();
+    onProgress(0.05);
     try {
-      await for (final chunk in response.stream) {
-        sink.add(chunk);
-        received += chunk.length;
-        if (total > 0) onProgress(received / total);
-      }
-      await sink.close();
+      // ByteData completo en memoria: el asset ya vive comprimido dentro
+      // del APK, así que esto no es peor que lo que Android ya hace al
+      // instalar la app -- pero es un pico real de RAM (~1GB) a vigilar
+      // en dispositivos con poca memoria (ver README, limitación conocida).
+      final data = await rootBundle.load(_llmAssetPath);
+      onProgress(0.5);
+      await tmpFile.writeAsBytes(data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes));
       await tmpFile.rename(path);
+      onProgress(1.0);
     } catch (e) {
-      await sink.close();
       if (await tmpFile.exists()) await tmpFile.delete();
-      rethrow;
+      throw Exception(
+        'No encontré el modelo del asistente ($_llmAssetPath). '
+        'Hace falta descargarlo y compilar el APK con él incluido -- ver mobile/README.md.',
+      );
     }
-    // ignore: unnecessary_statements
-    file; // referenciado para claridad del path final
   }
 
   /// Descarga y descomprime el modelo Vosk (viene como .zip).
