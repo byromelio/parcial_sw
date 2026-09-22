@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 MODEL = "gemini-3.5-flash"
 FALLBACK_MODEL = "gemini-3.5-flash-lite"
-REQUEST_TIMEOUT = 30.0
+REQUEST_TIMEOUT = 45.0
 
 SYSTEM_PROMPT = """Transcribí exactamente lo que se dice en este audio, en \
 español. Devolvé ÚNICAMENTE el texto transcripto, sin comillas, sin \
