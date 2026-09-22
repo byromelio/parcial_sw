@@ -1,7 +1,8 @@
 package com.test.uap;
 
-import jakarta.annotation.PostConstruct;
 import jakarta.persistence.*;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +27,6 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "uap_generation")
-@Component
 public class UapGeneration {
 
     @Id
@@ -36,37 +36,50 @@ public class UapGeneration {
     @Column(name = "generation_uuid", nullable = false, unique = true)
     private String generationUuid;
 
-    // Guardado en memoria despues de resolverlo una vez: evitar una
-    // consulta a la base en cada request a /uap/v1/manifest o
-    // /uap/v1/sync/state, que son las rutas mas llamadas del protocolo.
-    private static volatile String cached;
-
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getGenerationUuid() { return generationUuid; }
     public void setGenerationUuid(String generationUuid) { this.generationUuid = generationUuid; }
 
-    @PersistenceContext
-    private EntityManager entityManager;
+    /**
+     * Resuelve/crea la fila de generacion y expone el UUID en memoria.
+     * Separado de la entidad JPA a proposito: si esta logica corriera en
+     * un @PostConstruct de la propia @Entity (como estaba antes), Spring
+     * instancia ese bean durante el arranque del contexto, un momento en
+     * el que el EntityManagerFactory puede no haber terminado de escanear
+     * el metamodelo de Hibernate todavia -- la consulta JPQL fallaba con
+     * "Could not resolve root entity 'UapGeneration'" de forma
+     * intermitente. Con ApplicationReadyEvent, el contexto (y JPA) ya
+     * estan completamente inicializados antes de que esto corra.
+     */
+    @Component
+    public static class Initializer {
+        private final EntityManager entityManager;
+        private static volatile String cached;
 
-    @PostConstruct
-    @Transactional
-    public void ensureGenerationExists() {
-        UapGeneration existing = entityManager
-                .createQuery("select g from UapGeneration g", UapGeneration.class)
-                .setMaxResults(1)
-                .getResultStream()
-                .findFirst()
-                .orElse(null);
-        if (existing == null) {
-            existing = new UapGeneration();
-            existing.setGenerationUuid(UUID.randomUUID().toString());
-            entityManager.persist(existing);
+        public Initializer(EntityManager entityManager) {
+            this.entityManager = entityManager;
         }
-        cached = existing.getGenerationUuid();
-    }
 
-    public String currentGeneration() {
-        return cached;
+        @EventListener(ApplicationReadyEvent.class)
+        @Transactional
+        public void ensureGenerationExists() {
+            UapGeneration existing = entityManager
+                    .createQuery("select g from UapGeneration g", UapGeneration.class)
+                    .setMaxResults(1)
+                    .getResultStream()
+                    .findFirst()
+                    .orElse(null);
+            if (existing == null) {
+                existing = new UapGeneration();
+                existing.setGenerationUuid(UUID.randomUUID().toString());
+                entityManager.persist(existing);
+            }
+            cached = existing.getGenerationUuid();
+        }
+
+        public String currentGeneration() {
+            return cached;
+        }
     }
 }

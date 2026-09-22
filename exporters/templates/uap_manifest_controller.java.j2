@@ -20,9 +20,9 @@ import java.util.Map;
 @RequestMapping("/uap/v1")
 public class UapManifestController {
 
-    private final UapGeneration generationProvider;
+    private final UapGeneration.Initializer generationProvider;
 
-    public UapManifestController(UapGeneration generationProvider) {
+    public UapManifestController(UapGeneration.Initializer generationProvider) {
         this.generationProvider = generationProvider;
     }
 

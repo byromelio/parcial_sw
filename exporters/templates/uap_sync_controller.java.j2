@@ -25,13 +25,13 @@ import java.util.Map;
 @RequestMapping("/uap/v1/sync")
 public class UapSyncController {
 
-    private final UapGeneration generationProvider;
+    private final UapGeneration.Initializer generationProvider;
     private final UapToolDispatcher dispatcher;
 
     @PersistenceContext
     private EntityManager entityManager;
 
-    public UapSyncController(UapGeneration generationProvider, UapToolDispatcher dispatcher) {
+    public UapSyncController(UapGeneration.Initializer generationProvider, UapToolDispatcher dispatcher) {
         this.generationProvider = generationProvider;
         this.dispatcher = dispatcher;
     }

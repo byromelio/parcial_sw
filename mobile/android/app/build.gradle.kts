@@ -19,10 +19,10 @@ android {
         applicationId = "com.example.uml_collab_mobile"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        // Fijado en 24 (en vez del default de Flutter) porque tanto
-        // llamadart (LLM local) como vosk_flutter_2 (reconocimiento de voz
-        // offline) lo requieren -- ver mobile/README.md.
-        minSdk = 24
+        // vosk_flutter_2 declara minSdk 30 en su propio manifest de Android
+        // (el README de este proyecto decía 24, dato desactualizado o
+        // incorrecto: Gradle rechaza el merge con un valor menor).
+        minSdk = 30
         targetSdk = flutter.targetSdkVersion
         // Uses the version code from pubspec.yaml. When using split APKs, 1000 * ABI_VERSION
         // is added automatically by Flutter. (https://developer.android.com/studio/build/configure-apk-splits#configure-APK-versions)
