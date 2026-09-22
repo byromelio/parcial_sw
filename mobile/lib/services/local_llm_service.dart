@@ -37,6 +37,24 @@ class LlmToolCall {
   LlmToolCall(this.tool, this.arguments);
 }
 
+/// Lo que el LLM puede devolver frente a un pedido en lenguaje natural:
+/// o bien identificó una operación concreta (ToolProposal, que sigue
+/// siendo solo una PROPUESTA -- IntentParser la valida antes de ejecutar
+/// nada), o determinó que el usuario está charlando/preguntando algo
+/// general y devuelve una respuesta de texto libre (ChatReply) para
+/// mostrar tal cual, como cualquier asistente conversacional.
+sealed class LlmResponse {}
+
+class ToolProposal extends LlmResponse {
+  final LlmToolCall call;
+  ToolProposal(this.call);
+}
+
+class ChatReply extends LlmResponse {
+  final String text;
+  ChatReply(this.text);
+}
+
 class LocalLlmService {
   LlamaEngine? _engine;
   bool _loaded = false;
@@ -108,46 +126,63 @@ Instrucción del usuario: $userText
 
   /// Igual que resolveCommand, pero para un backend UAP genérico: las
   /// tools disponibles NO están hardcodeadas, se arman en runtime a partir
-  /// de lo que ese backend puntual expuso en /uap/v1/tools. El resultado
-  /// sigue siendo solo una PROPUESTA -- ver IntentParser, que es quien
-  /// valida esto antes de ejecutar nada.
-  Future<LlmToolCall> resolveUapCommand({
+  /// de lo que ese backend puntual expuso en /uap/v1/tools.
+  ///
+  /// A diferencia de resolveCommand (que siempre fuerza un tool-call), acá
+  /// el modelo puede elegir entre dos formas de responder: si identifica
+  /// una operación concreta, propone {"tool":...,"args":...} (sigue siendo
+  /// solo una PROPUESTA -- IntentParser la valida antes de ejecutar nada);
+  /// si el pedido es charla general (una pregunta, un comentario, algo sin
+  /// relación con las herramientas), responde {"chat": "..."} con texto
+  /// libre que se muestra tal cual, como cualquier asistente conversacional.
+  /// Ambos caminos en un solo prompt/llamada a propósito: una segunda
+  /// llamada al LLM (primero "¿es operación o charla?", después resolver)
+  /// duplicaría la latencia en un chip sin GPU como el Snapdragon 662.
+  Future<LlmResponse> resolveUapCommand({
     required String userText,
     required List<UapToolSummary> tools,
   }) async {
     final toolsDescription = tools.map((t) => '- ${t.toolId}: ${t.description} (campos: ${t.fieldNames.join(', ')})').join('\n');
 
     final prompt = '''
-Sos un asistente que ejecuta operaciones sobre un sistema, a partir de
-instrucciones en lenguaje natural en español. Solo podés usar las
-herramientas listadas abajo -- si el pedido no corresponde a ninguna,
-respondé {"tool": "unknown", "args": {}}.
+Sos un asistente conversacional que además puede ejecutar operaciones
+sobre un sistema, a partir de instrucciones en lenguaje natural en
+español. Respondé SIEMPRE con un único JSON, sin texto antes ni después,
+de una de estas dos formas:
+
+1) Si el usuario pide crear, listar, consultar, actualizar o eliminar
+   algo de las herramientas de abajo:
+   {"tool": "<toolId de la lista>", "args": {"campo": "valor", ...}}
+   No inventes campos que no estén en la lista de la herramienta elegida.
+
+2) Si el usuario está charlando, preguntando algo general, o su pedido no
+   corresponde a ninguna herramienta (saludo, pregunta sobre vos, charla
+   casual, lo que sea):
+   {"chat": "tu respuesta en español, natural y breve"}
 
 Herramientas disponibles:
 $toolsDescription
 
-Respondé SIEMPRE con un único JSON, sin texto antes ni después, con esta
-forma exacta:
-{"tool": "<toolId de la lista>", "args": {"campo": "valor", ...}}
-
-No inventes campos que no estén en la lista de la herramienta elegida.
-
 Instrucción del usuario: $userText
 ''';
-    return parseToolCallFromRaw(await _generate(prompt));
+    return parseLlmResponseFromRaw(await _generate(prompt, maxTokens: 300));
   }
 
-  Future<String> _generate(String prompt) async {
+  Future<String> _generate(String prompt, {int maxTokens = 200}) async {
     if (!_loaded || _engine == null) {
       throw StateError('El modelo local todavía no está cargado.');
     }
     final buffer = StringBuffer();
     // maxTokens/temp van dentro de GenerationParams en la API real de
-    // llamadart (no como parametros sueltos de generate()) -- temp bajo
-    // porque esto es function-calling, no charla libre.
+    // llamadart (no como parametros sueltos de generate()). temp bajo
+    // (0.1) a propósito incluso para las respuestas de charla: sigue
+    // siendo un modelo de 1B parámetros con recursos muy limitados, y una
+    // temperatura más alta aumenta el riesgo de que ni siquiera devuelva
+    // JSON válido (ver extractFirstJsonObject/parseLlmResponseFromRaw,
+    // que ya son tolerantes a texto extra alrededor por esta razón).
     await for (final token in _engine!.generate(
       prompt,
-      params: const GenerationParams(maxTokens: 200, temp: 0.1),
+      params: GenerationParams(maxTokens: maxTokens, temp: 0.1),
     )) {
       buffer.write(token);
     }
@@ -180,6 +215,29 @@ LlmToolCall parseToolCallFromRaw(String raw) {
     throw FormatException('La respuesta no tiene el campo "tool": $jsonStr');
   }
   return LlmToolCall(tool, args);
+}
+
+/// Igual que parseToolCallFromRaw, pero distingue el JSON de tool-call
+/// ({"tool":...}) del de charla libre ({"chat":...}) -- ver
+/// resolveUapCommand. Un objeto sin ninguno de los dos campos esperados
+/// es un error de formato, igual que antes.
+LlmResponse parseLlmResponseFromRaw(String raw) {
+  final jsonStr = extractFirstJsonObject(raw);
+  if (jsonStr == null) {
+    throw FormatException('El modelo no devolvió un JSON reconocible: $raw');
+  }
+  final data = jsonDecode(jsonStr) as Map<String, dynamic>;
+
+  final chat = data['chat'] as String?;
+  if (chat != null) return ChatReply(chat);
+
+  final tool = data['tool'] as String?;
+  if (tool != null) {
+    final args = (data['args'] as Map?)?.cast<String, dynamic>() ?? {};
+    return ToolProposal(LlmToolCall(tool, args));
+  }
+
+  throw FormatException('La respuesta no tiene ni "tool" ni "chat": $jsonStr');
 }
 
 /// Busca el primer objeto JSON balanceado dentro de un texto -- el modelo
