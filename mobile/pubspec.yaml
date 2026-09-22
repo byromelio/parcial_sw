@@ -31,7 +31,15 @@ dependencies:
   # estructurada, que es lo que necesitamos para que el modelo elija qué
   # función de la API llamar (create_class, add_attribute, etc.) en vez de
   # solo charlar.
-  llamadart: 0.5.4
+  #
+  # Pin en 0.6.9 (no la última) a propósito: versiones <0.6.9 tienen un bug
+  # real y confirmado (SIGILL al cargar CUALQUIER modelo GGUF en chips sin
+  # soporte i8mm/dotprod -- ej. Snapdragon 662/680, Exynos 1380; el binario
+  # nativo de llama.cpp usa kernels KleidiAI sin verificar en runtime si el
+  # CPU los soporta). Arreglado en 0.6.9, que agrega selección automática
+  # de variante de CPU en runtime. Ver
+  # https://github.com/leehack/llamadart/issues/95
+  llamadart: ^0.6.9
   # Reconocimiento de voz offline (modelo español chico, ~50MB).
   vosk_flutter_2: ^1.0.5
 
@@ -41,7 +49,12 @@ dependencies:
   uuid: ^4.5.1
   intl: ^0.19.0
   # Descomprimir el .zip del modelo Vosk descargado en tiempo de ejecución.
-  archive: ^3.6.1
+  # llamadart >=0.6.9 exige archive ^4.0.7; vosk_flutter_2 1.0.5 declara
+  # ^3.4.2 pero solo usa ZipDecoder().decodeBytes()/extractArchiveToDisk(),
+  # una API estable que no cambió entre 3.x y 4.x -- se fuerza la 4.x acá
+  # y con dependency_overrides abajo (verificado leyendo el código real de
+  # vosk_flutter_2, no solo el rango declarado).
+  archive: ^4.0.7
   collection: ^1.18.0
 
   # ---- UAP: cliente genérico + offline-first ----
@@ -67,6 +80,15 @@ dev_dependencies:
   # real corriendo los tests): permite testear local_repository.dart con
   # una base de datos real en vez de mockear todo el acceso a datos.
   sqflite_common_ffi: ^2.4.3
+
+# vosk_flutter_2 1.0.5 declara archive ^3.4.2 en su pubspec, lo que choca
+# con lo que llamadart >=0.6.9 necesita (^4.0.7). Se fuerza acá porque ya
+# se verificó que el uso real de archive en vosk_flutter_2 (ver comentario
+# arriba) es compatible con la 4.x -- si una futura versión de
+# vosk_flutter_2 usa una API distinta, este override puede necesitar
+# revisión.
+dependency_overrides:
+  archive: ^4.0.7
 
 flutter:
   uses-material-design: true
