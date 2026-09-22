@@ -53,7 +53,12 @@ def transcribe_audio(audio_bytes: bytes, mime_type: str) -> str:
         )
 
     def is_unavailable(e: Exception) -> bool:
-        return "UNAVAILABLE" in str(e) or "503" in str(e)
+        return (
+            "UNAVAILABLE" in str(e)
+            or "503" in str(e)
+            or "DEADLINE_EXCEEDED" in str(e)
+            or "504" in str(e)
+        )
 
     # Mismo patron de reintentos que diagram_vision.py: la capa gratuita de
     # Gemini devuelve 503 "high demand" seguido y suele ser transitorio.

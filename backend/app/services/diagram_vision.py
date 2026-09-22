@@ -54,7 +54,7 @@ MODEL = "gemini-3.5-flash"  # mejor lectura de imagen que el -lite para este cas
 # Respaldo si el modelo principal esta saturado (503 sostenido): el -lite
 # suele tener menos demanda y sigue leyendo imagenes razonablemente bien.
 FALLBACK_MODEL = "gemini-3.5-flash-lite"
-REQUEST_TIMEOUT = 60.0
+REQUEST_TIMEOUT = 90.0
 
 SYSTEM_PROMPT = """Sos un asistente que transcribe un diagrama de clases UML \
 dibujado a mano (en una foto de pizarra o papel) a datos estructurados.
@@ -158,7 +158,12 @@ def detect_from_image(image_bytes: bytes, mime_type: str) -> VisionDetectResult:
         )
 
     def is_unavailable(e: Exception) -> bool:
-        return "UNAVAILABLE" in str(e) or "503" in str(e)
+        return (
+            "UNAVAILABLE" in str(e)
+            or "503" in str(e)
+            or "DEADLINE_EXCEEDED" in str(e)
+            or "504" in str(e)
+        )
 
     # La capa gratuita de Gemini devuelve 503 "high demand" con bastante
     # frecuencia y es tipicamente transitorio (segundos): un par de
