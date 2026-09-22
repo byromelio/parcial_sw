@@ -44,10 +44,10 @@ class AppState extends ChangeNotifier {
   }
 
   // ---------------------------------------------------------------
-  // Conexión a un backend UAP generado (flujo aparte del diagramador,
-  // ver ModeSelectorScreen/UapConnectScreen). Se instancian recién al
-  // conectar -- no en el constructor -- porque dependen del endpoint
-  // (USB/desplegado) que el usuario elija en esa pantalla.
+  // Conexión a un backend UAP generado (ver UapConnectScreen, la pantalla
+  // de arranque de la app). Se instancian recién al conectar -- no en el
+  // constructor -- porque dependen del endpoint (USB/desplegado) que el
+  // usuario elija en esa pantalla.
   // ---------------------------------------------------------------
   UapClient? uapClient;
   LocalRepository? localDb;
