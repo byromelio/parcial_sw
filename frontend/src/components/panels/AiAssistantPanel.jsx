@@ -79,40 +79,80 @@ export default function AiAssistantPanel({ diagramId }) {
   // Acá el audio grabado se sube como archivo y el texto que vuelve entra
   // al mismo flujo que un comando escrito a mano.
   const toggleVoice = async () => {
+    console.log("[voice] toggleVoice, listening=", listening);
     if (listening) {
       mediaRecorderRef.current?.stop();
       return;
     }
     if (!navigator.mediaDevices?.getUserMedia) {
+      console.log("[voice] getUserMedia no existe en este navegador");
       setLog((prev) => [
         ...prev,
         { role: "error", text: "Este navegador no permite grabar audio." },
       ]);
       return;
     }
-
-    let stream;
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch {
+    if (!window.isSecureContext) {
+      console.log("[voice] contexto no seguro (ni https ni localhost)");
       setLog((prev) => [
         ...prev,
-        { role: "error", text: "No se pudo acceder al micrófono. Revisá los permisos del navegador." },
+        { role: "error", text: "El micrófono solo funciona por HTTPS o en localhost." },
       ]);
       return;
     }
 
-    const recorder = new MediaRecorder(stream);
+    let stream;
+    try {
+      console.log("[voice] pidiendo getUserMedia...");
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log("[voice] permiso concedido, stream:", stream, "tracks:", stream.getAudioTracks());
+    } catch (err) {
+      console.error("[voice] getUserMedia rechazado:", err?.name, err?.message, err);
+      setLog((prev) => [
+        ...prev,
+        {
+          role: "error",
+          text: `No se pudo acceder al micrófono (${err?.name || "error"}). Revisá los permisos del navegador para este sitio.`,
+        },
+      ]);
+      return;
+    }
+
+    let recorder;
+    try {
+      recorder = new MediaRecorder(stream);
+    } catch (err) {
+      console.error("[voice] MediaRecorder no se pudo crear:", err);
+      setLog((prev) => [
+        ...prev,
+        { role: "error", text: "Este navegador no puede grabar audio en el formato soportado." },
+      ]);
+      return;
+    }
     audioChunksRef.current = [];
     recorder.ondataavailable = (e) => {
+      console.log("[voice] ondataavailable, size:", e.data.size);
       if (e.data.size > 0) audioChunksRef.current.push(e.data);
+    };
+    recorder.onerror = (e) => {
+      console.error("[voice] MediaRecorder error:", e.error);
     };
     recorder.onstop = async () => {
       stream.getTracks().forEach((t) => t.stop());
       setListening(false);
 
       const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || "audio/webm" });
-      if (blob.size === 0) return;
+      console.log("[voice] blob grabado:", blob.size, "bytes, mimeType:", recorder.mimeType);
+      if (blob.size === 0) {
+        setLog((prev) => [
+          ...prev,
+          {
+            role: "error",
+            text: "No se grabó audio. Probá mantener apretado el micrófono más tiempo, o revisá que esté eligiendo el dispositivo correcto en los permisos del navegador.",
+          },
+        ]);
+        return;
+      }
 
       setTranscribing(true);
       try {
