@@ -1,66 +1,120 @@
 # Estado actual — parcial_sw
 
-**Fecha de actualización**: 2026-09-20.
+**Fecha de actualización**: 2026-09-22.
 
-## Último trabajo realizado (según `git status`/`git diff` visibles al momento de este audit)
+## Resumen del proyecto (5 piezas)
 
-Cambios sin commitear en el working tree, rama `main`:
-- `M backend/app/main.py` — registra el nuevo router `voice`.
-- `M frontend/src/components/panels/AiAssistantPanel.jsx` — reemplaza la Web Speech API por grabación + transcripción backend.
-- `?? backend/app/routers/voice.py` (nuevo) — endpoint `POST /voice/transcribe`.
-- `?? backend/app/schemas/voice.py` (nuevo) — `VoiceTranscribeResult`.
-- `?? backend/app/services/voice_transcribe.py` (nuevo) — transcripción de audio vía Gemini.
-- `?? frontend/src/api/voice.js` (nuevo) — cliente HTTP del endpoint de voz.
+1. **Diagramador** (backend FastAPI + frontend React): editor colaborativo
+   de diagramas UML, terminado y funcional, **no tocado** en esta etapa de
+   trabajo.
+2. **`exporters/`**: genera un backend Spring Boot completo a partir de un
+   diagrama, incluyendo el protocolo **UAP** (manifest/schema/tools/
+   invoke/sync) — verificado end-to-end contra un export real (compiló con
+   Maven, corrió en Docker, respondió peticiones reales).
+3. **`mobile/`**: cliente genérico de UAP con asistente conversacional (voz
+   o texto), LLM local (Gemma 3 1B), SQLite offline-first — verificado
+   corriendo en un teléfono físico real, conectado a un backend generado.
+4. **Backend Spring Boot generados**: artefacto de salida de `exporters/`,
+   no forma parte del repo en sí.
+5. **UI específica del backend generado**: pendiente, se construye el día
+   del examen según el dominio real del diagrama que se dibuje.
 
-Esto constituye una funcionalidad completa y coherente de "dictado por voz para el asistente de IA del editor web", con el backend registrado en `main.py` y el frontend consumiéndolo — confirmado por lectura de código, no por ejecución.
+## Trabajo reciente (esta sesión)
 
-Commits recientes en el historial (`git log`, previos a estos cambios sin commitear):
-```
-12bacb0 docs: add project context, architecture and session-start guides
-8557157 feat(mobile): scaffold Flutter app source and generate android/ for first build
-fa9ebb8 feat(backend): add Postman collection and OpenAPI-to-Postman script
-66d415f feat(infra): add Docker Compose for the diagramador and exporter Dockerfile
-55a7124 chore: ignore local backups and tool cache directories
-```
-El commit `8557157` ("generate android/ for first build") es consistente con lo verificado en `CONTEXTO_MOBILE.md`: `mobile/android/` y `pubspec.lock` ya existen en el repo, contradiciendo al `CONTEXTO_PROYECTO.md` original que decía que mobile nunca se había compilado ni tenía `android/`.
+### `exporters/` — protocolo UAP genérico
 
-## Funcionalidades terminadas (confirmado por lectura de código)
+Nuevo generador `exporters/generators/uap_generator.py` + 9 templates
+Java (`UapManifestController`, `UapSchemaController`, `UapToolsController`,
+`UapToolDispatcher`, `UapSyncController`, `UapGeneration`, `UapChangeLog`,
+`UapCoerce`, `JacksonTimeZoneConfig`), integrados en el pipeline existente
+(`project_builder.py`). Sin reflexión Java (dispatcher generado como
+switch estático en build-time). 77 tests de Python pasando.
 
-- CRUD de diagramas, clases, atributos, métodos, relaciones (backend + frontend).
-- Colaboración en tiempo real vía WebSocket (locks por clase, cursores en vivo).
-- Login con JWT.
-- Asistente de IA por texto (Gemini, contrato de tools fijo).
-- **Asistente de IA por voz, web (nuevo)**: grabación en el navegador → `POST /voice/transcribe` → Gemini transcribe → texto entra al flujo normal de `POST /diagrams/{id}/ai/command`. Router registrado en `main.py`. No probado en ejecución en esta sesión.
-- Importar diagrama desde foto (Gemini Vision) con vista previa editable.
-- Exportar/importar XMI 2.1.
-- Generación de backend Spring Boot.
-- Conversión a clase de asociación (UML 2.5).
-- Asistente de IA por voz/texto 100% offline en mobile (Vosk + LLM local vía `llamadart`) — independiente del punto de voz web.
-- Mobile: `android/` generado, `pubspec.lock` presente (avance real no documentado previamente).
+**Verificado real, no solo por tests**: se descargó un ZIP exportado real
+(dominio bancario: Bank/Customer/ATM/Account/etc), se levantó con
+`docker compose up --build`, compiló con Maven, y respondió correctamente
+a `curl` contra `/uap/v1/manifest` y `/uap/v1/tools` con datos reales.
 
-## Funcionalidades en desarrollo / no confirmadas
+### `mobile/` — cliente UAP, LLM local, asistente conversacional
 
-- Funcionamiento en ejecución del endpoint `/voice/transcribe` (depende de `GEMINI_API_KEY` válida en `backend/.env`, contenido no leído en este audit).
-- Compilación real de la app mobile (`flutter run`/`build` no ejecutado en esta sesión, pese a que `android/` y `pubspec.lock` ya existen).
-- Estado de tracking en git de `mobile/` (ambiguo: no aparece en el `git status` inicial, no se determinó si es porque ya está commiteado o porque sigue en `.gitignore`).
+Ver `CONTEXTO_MOBILE.md` para el detalle completo. Resumen de lo hecho en
+esta sesión, en orden:
 
-## Problemas pendientes
+1. Diseño e implementación completa del cliente UAP genérico (`lib/uap/`),
+   SQLite offline-first (`lib/db/`), TTS (`lib/voice/`), pantallas nuevas.
+2. **Corregido un malentendido de una sesión anterior**: la app ofrecía
+   "Diseñar diagramas" como opción principal, cuando el mobile no es para
+   eso (eso se hace en la web). Se cambió `main.dart` para ir directo a
+   `UapConnectScreen`, dejando el código del diagramador sin tocar pero
+   fuera del camino de navegación.
+3. **Bug real encontrado y arreglado**: `llamadart 0.5.4` crasheaba con
+   `SIGILL` al cargar CUALQUIER modelo GGUF en el teléfono de prueba
+   (Snapdragon 662, sin soporte `i8mm`/`dotprod`) — confirmado con logcat
+   real. Bug conocido upstream (`leehack/llamadart#95`), arreglado en
+   `0.6.9`. Se actualizó la dependencia con un `dependency_overrides` para
+   `archive` (verificado que no rompe `vosk_flutter_2`).
+4. **Bug real**: `UapClient` no tenía timeout en sus requests HTTP — una
+   conexión colgada dejaba la UI pegada en "sincronizando" para siempre.
+   Arreglado con timeout de 10s.
+5. **Bug real**: ni `HistorialScreen` ni `AlexaScreen` cargaban el LLM/Vosk
+   antes de usarlos — el botón de mic tiraba "Bad state" al tocarlo.
+   Arreglado con una etapa de preparación explícita en cada pantalla.
+6. **Bug real**: el banner de estado de conexión no se actualizaba en
+   vivo (el `ConnectionManager` es un `ChangeNotifier` separado que nadie
+   escuchaba desde la UI) — arreglado con `ListenableBuilder`.
+7. **`model_downloader.dart` corregido**: apuntaba a descargar Qwen por
+   HTTP (diseño viejo, nunca actualizado tras decidir migrar a Gemma
+   embebido en assets). Ahora copia `assets/models/assistant.gguf` al
+   storage privado en el primer arranque.
+8. **Feature nueva pedida por el usuario**: que el asistente "actúe como
+   una IA normal" — el LLM ahora puede responder charla libre
+   (`{"chat":"..."}`) además de proponer operaciones
+   (`{"tool":...,"args":...}"}`), en un solo prompt.
+9. **Bug real reportado y arreglado**: el parser no tenía memoria entre
+   turnos — responder "producto" a "¿qué querés hacer?" y luego "crear"
+   solo, fallaba porque el segundo mensaje no traía ninguna entidad en su
+   propio texto. Se agregó `ConversationContext`, que las pantallas
+   pasan entre llamadas a `parse()`.
 
-- `POST /diagrams/{id}/export-download` no exige autenticación (`get_current_user`) ni valida propiedad del diagrama — cualquiera con el UUID puede exportar. Hallazgo de este audit, no documentado previamente. No corregido (fuera de alcance de esta tarea).
-- Docstring desactualizado en `backend/app/services/ai_assistant.py`: sigue diciendo "la voz se transcribe en el cliente (Web Speech API)", lo cual ya no es así tras el cambio en `AiAssistantPanel.jsx`.
-- `mobile/README.md` sigue redactado como guía de "pasos pendientes" (generar `android/`, etc.) pese a que esos pasos ya se ejecutaron según el estado real del repo.
-- `frontend/README.md` es el boilerplate default de Vite, no documenta el proyecto.
-- No hay endpoint de sign-up activo, pese a existir `SignUpIn`.
-- No hay refresh token implementado, pese a existir `REFRESH_EXPIRE_DAYS` en la configuración.
-- Inconsistencia de nombres de campo español/inglés entre distintos endpoints (ver `CONTRATOS_API.md`).
-- `clase.nombre` no tiene unique constraint a nivel de base de datos por diagrama (solo se valida en el router) — a diferencia de `atributo`/`metodo`, que sí la tienen en el esquema SQL.
+Total: **111 tests de Dart pasando**, `flutter analyze` sin errores.
 
-## Próximas tareas sugeridas (no ejecutadas en este audit, solo listadas)
+## Verificado end-to-end en esta sesión (no solo tests unitarios)
 
-1. Levantar el backend con Docker y probar `/voice/transcribe` de punta a punta (grabar audio real desde el navegador).
-2. Confirmar si `GEMINI_API_KEY` está seteada y es válida en `backend/.env`.
-3. Corregir el docstring desactualizado de `ai_assistant.py` sobre dónde se transcribe la voz.
-4. Confirmar si `mobile/` está trackeado en git; si no, decidir si conviene agregarlo ahora que ya avanzó (`android/`, `pubspec.lock`).
-5. Intentar un build real de mobile (`flutter run`) para confirmar que compila.
-6. Decidir si se agrega autenticación a `POST /diagrams/{id}/export-download`.
-7. Actualizar `mobile/README.md` y `frontend/README.md` para reflejar el estado real.
+- Pipeline completo del diagramador → export → backend Spring Boot con
+  UAP → Docker → respuestas HTTP reales.
+- App móvil compilada, instalada y corriendo en un dispositivo Android
+  físico real (no emulador).
+- Conexión real por USB (`adb reverse`) entre el teléfono y el backend
+  generado corriendo en la PC.
+- LLM local (Gemma 3 1B) cargando y generando texto en el dispositivo
+  real (lento, pero funcional).
+- Conversación de varios turnos con contexto (entidad recordada entre
+  mensajes) probada en el dispositivo real.
+
+## Problemas pendientes / limitaciones conocidas
+
+- **Rendimiento del LLM en el chip de prueba** (Snapdragon 662, sin GPU):
+  funcional pero notablemente lento. Alternativa disponible si hace falta:
+  volver a Qwen2.5-1.5B, ya probado en una iteración anterior del proyecto.
+- Bug menor: el pluralizador simplista de `uap_generator.py` duplica la
+  "s" en nombres que ya terminan en "s" (ej. `"atmtransactionss"`). No
+  bloqueante, no arreglado todavía.
+- No se probó el ciclo offline-first completo (crear/editar sin conexión,
+  sincronizar al volver) en un dispositivo físico real, solo con
+  `sqflite_common_ffi` en el test runner de escritorio.
+- La UI específica por dominio del backend generado no existe todavía —
+  es trabajo planeado para el día del examen, no de esta etapa.
+- Problemas heredados de sesiones previas, no revisados en esta etapa:
+  falta de autenticación en `POST /diagrams/{id}/export-download`, sin
+  endpoint de sign-up activo, sin refresh token, inconsistencia de
+  nombres de campo español/inglés entre endpoints del diagramador (ver
+  `CONTRATOS_API.md`).
+
+## Reglas que rigieron este trabajo (confirmadas explícitamente por el usuario)
+
+- **No tocar el diagramador FastAPI/React** — está terminado y funcional.
+- **El LLM local es una sola instancia fija**, embebida en el APK, no se
+  regenera por backend — lo que varía por backend es el contrato UAP
+  descubierto en runtime.
+- **La UI del backend generado se construye el día del examen**, según el
+  diagrama real que se dibuje ahí — no antes, no con datos de prueba.
