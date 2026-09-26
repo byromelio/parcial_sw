@@ -292,9 +292,14 @@ export default function DiagramDashboard() {
 
   // No atrapa el error acá: RelationInspector usa useAutoSave con esta
   // función, que necesita que la promesa rechace para poder mostrar el
-  // estado "no se pudo guardar" en el panel en vez de un alert().
-  const handleUpdateRelation = async (patch) => {
-    const updated = await updateRelation(selectedRel.id, patch);
+  // estado "no se pudo guardar" en el panel en vez de un alert(). Acepta un
+  // id explícito (lo usa ConnectionLayer al arrastrar el extremo de
+  // CUALQUIER relación, no solo la seleccionada) y, si no se pasa, cae en
+  // la relación actualmente seleccionada -- así RelationInspector la sigue
+  // llamando igual que antes.
+  const handleUpdateRelation = async (patch, relationId = selectedRel?.id) => {
+    if (!relationId) return;
+    const updated = await updateRelation(relationId, patch);
 
     // UML 2.5: una asociación muchos-a-muchos con atributos propios se
     // modela como una clase de asociación explícita, no solo como una
@@ -546,6 +551,7 @@ export default function DiagramDashboard() {
             camera={camera}
             selectedRelId={selectedRelId}
             onSelectRelation={(rid) => { setSelectedRelId(rid); setSelectedId(null); }}
+            onUpdateRelation={(relationId, patch) => handleUpdateRelation(patch, relationId)}
           />
 
           {/* Aviso de deshacer */}

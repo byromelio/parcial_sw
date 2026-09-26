@@ -6,7 +6,7 @@
 // cada ClassCard hasta que se suelta el mouse.
 
 import { useEffect, useMemo, useState } from "react";
-import { getAnchorForClassSide } from "./utils/geometry";
+import { getAnchorForClassSide, inferClosestSide } from "./utils/geometry";
 
 const DEFAULT_COLOR = "#7cf7ff";
 const SELECTED_COLOR = "#4f7cff"; // var(--accent)
@@ -20,6 +20,7 @@ export default function ConnectionLayer({
   camera,
   selectedRelId = null,
   onSelectRelation,
+  onUpdateRelation,
 }) {
   const [viewport, setViewport] = useState(() => ({
     w: document.documentElement.clientWidth,
@@ -58,6 +59,60 @@ export default function ConnectionLayer({
       if (raf) cancelAnimationFrame(raf);
     };
   }, []);
+
+  // El primer cálculo de relationSegments corre en el mismo commit de React
+  // en que se montan las ClassCard, ANTES de que el navegador termine de
+  // pintarlas -- getAnchorForClassSide lee getBoundingClientRect() del DOM
+  // real, así que ese primer cálculo puede leer rects todavía sin asentar
+  // (o vacíos) y descartar todas las relaciones. Sin este recálculo, las
+  // líneas quedaban invisibles hasta que alguien arrastraba o
+  // redimensionaba una clase (lo único que hasta ahora disparaba
+  // diagram:geometry-change).
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => forceTick((t) => t + 1));
+    return () => cancelAnimationFrame(raf);
+  }, [relations, classes]);
+
+  // Arrastre de los extremos de la relación seleccionada: en vez de tener
+  // que ir al panel a elegir "Sale por/Llega por" en un <select>, se puede
+  // agarrar directo la puntita de la línea en el lienzo y soltarla más
+  // cerca de otro lado de la clase (arriba/abajo/izquierda/derecha) -- el
+  // mismo repertorio de anclajes que ya soportaba el panel, solo que ahora
+  // también se elige arrastrando.
+  const [dragEndpoint, setDragEndpoint] = useState(null); // { relationId, end, classId, point }
+
+  useEffect(() => {
+    if (!dragEndpoint) return;
+
+    const onMove = (e) => {
+      setDragEndpoint((prev) => (prev ? { ...prev, point: { x: e.clientX, y: e.clientY } } : prev));
+    };
+    const onUp = (e) => {
+      const { relationId, end, classId } = dragEndpoint;
+      const side = inferClosestSide(classId, { x: e.clientX, y: e.clientY });
+      const patchKey = end === "src" ? "src_anchor" : "dst_anchor";
+      // El resultado real (la línea recalculada desde `relations`) llega
+      // por el estado que actualiza el padre al resolverse; acá solo hace
+      // falta no dejar la promesa sin atender si el PATCH falla.
+      Promise.resolve(onUpdateRelation?.(relationId, { [patchKey]: side })).catch(() => {
+        alert("No se pudo mover la línea");
+      });
+      setDragEndpoint(null);
+    };
+
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+  }, [dragEndpoint, onUpdateRelation]);
+
+  const startEndpointDrag = (relationId, end, classId, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    setDragEndpoint({ relationId, end, classId, point: { x: e.clientX, y: e.clientY } });
+  };
 
   /** Normaliza el tipo de relación (si no viene o es inválido → ASSOCIATION) */
   const normalizeType = (t) => {
@@ -194,9 +249,19 @@ export default function ConnectionLayer({
         const color = isSelected ? SELECTED_COLOR : strokeColor;
         const suffix = isSelected ? "-sel" : "";
 
+        // Mientras se arrastra uno de los extremos de ESTA relación, ese
+        // punto sigue al mouse en vivo en vez de quedar clavado en el
+        // anclaje anterior -- si no, el handle se ve "pegado" a la clase
+        // hasta soltar, sin dar ninguna pista de hacia dónde se está
+        // moviendo la línea.
+        const draggingSrc = dragEndpoint?.relationId === seg.id && dragEndpoint.end === "src";
+        const draggingDst = dragEndpoint?.relationId === seg.id && dragEndpoint.end === "dst";
+        const a = draggingSrc ? dragEndpoint.point : seg.a;
+        const b = draggingDst ? dragEndpoint.point : seg.b;
+
         const so = labelOffset(seg.srcA);
         const dof = labelOffset(seg.dstA);
-        const mid = { x: (seg.a.x + seg.b.x) / 2, y: (seg.a.y + seg.b.y) / 2 };
+        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 
         const lineProps = {
           stroke: color,
@@ -236,10 +301,10 @@ export default function ConnectionLayer({
 
         const labels = (
           <>
-            <text x={seg.a.x + so.dx} y={seg.a.y + so.dy} fontSize="10" textAnchor={so.anchor} style={labelStyle}>
+            <text x={a.x + so.dx} y={a.y + so.dy} fontSize="10" textAnchor={so.anchor} style={labelStyle}>
               {fmtMult(seg.srcMin, seg.srcMax)}
             </text>
-            <text x={seg.b.x + dof.dx} y={seg.b.y + dof.dy} fontSize="10" textAnchor={dof.anchor} style={labelStyle}>
+            <text x={b.x + dof.dx} y={b.y + dof.dy} fontSize="10" textAnchor={dof.anchor} style={labelStyle}>
               {fmtMult(seg.dstMin, seg.dstMax)}
             </text>
             {seg.label && (
@@ -257,6 +322,33 @@ export default function ConnectionLayer({
           onClick: () => onSelectRelation?.(seg.id),
         };
 
+        // Handles para arrastrar cada extremo a otro lado de su clase: solo
+        // en la relación seleccionada y solo cuando no es recursiva (una
+        // clase consigo misma ya usa un par de anclajes fijos por diseño,
+        // ver getAnchorsForRelation). pointerEvents "auto" porque el resto
+        // del SVG lo tiene en "none" para dejar pasar los clicks al Sheet.
+        const endpointHandles =
+          isSelected && !seg.recursive && onUpdateRelation ? (
+            <>
+              <circle
+                cx={a.x} cy={a.y} r={7}
+                fill="var(--surface-1)" stroke={SELECTED_COLOR} strokeWidth={2}
+                style={{ pointerEvents: "auto", cursor: "grab" }}
+                onMouseDown={(e) => startEndpointDrag(seg.id, "src", seg.fromId, e)}
+              >
+                <title>Arrastrá para cambiar por dónde sale la línea</title>
+              </circle>
+              <circle
+                cx={b.x} cy={b.y} r={7}
+                fill="var(--surface-1)" stroke={SELECTED_COLOR} strokeWidth={2}
+                style={{ pointerEvents: "auto", cursor: "grab" }}
+                onMouseDown={(e) => startEndpointDrag(seg.id, "dst", seg.toId, e)}
+              >
+                <title>Arrastrá para cambiar por dónde llega la línea</title>
+              </circle>
+            </>
+          ) : null;
+
         if (seg.recursive) {
           const d = recursivePath(seg);
           return (
@@ -270,9 +362,10 @@ export default function ConnectionLayer({
 
         return (
           <g key={seg.id}>
-            <line x1={seg.a.x} y1={seg.a.y} x2={seg.b.x} y2={seg.b.y} {...lineProps} markerEnd={markerEnd} />
-            <line x1={seg.a.x} y1={seg.a.y} x2={seg.b.x} y2={seg.b.y} {...hitProps} />
+            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} {...lineProps} markerEnd={markerEnd} />
+            <line x1={a.x} y1={a.y} x2={b.x} y2={b.y} {...hitProps} />
             {labels}
+            {endpointHandles}
           </g>
         );
       })}

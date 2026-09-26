@@ -64,7 +64,16 @@ export const createRelation = (diagramId, params) => {
 };
 
 /**
- * Actualizar una relación existente
+ * Actualizar una relación existente. Es un PATCH parcial de verdad: un campo
+ * de multiplicidad ausente en `patch` (RelationInspector siempre los manda
+ * los 4 con valores reales, pero por ejemplo ConnectionLayer -- al arrastrar
+ * un extremo de la línea -- solo manda src_anchor/dst_anchor) tiene que
+ * quedar afuera del body, no viajar como `null`. normalizeMult(undefined)
+ * devuelve `null` (trata "sin valor" como "sin límite"), así que omitUndefined
+ * -- que solo filtra `undefined` estricto -- lo dejaba pasar igual: el
+ * backend lo interpretaba como "poné la multiplicidad en null", y esa
+ * columna es NOT NULL, así que el update fallaba con un 500 apenas se movía
+ * un extremo de una relación sin tocar también su multiplicidad.
  */
 export const updateRelation = (relationId, patch = {}) => {
   const body = omitUndefined({
@@ -76,10 +85,10 @@ export const updateRelation = (relationId, patch = {}) => {
     dst_offset: patch.dst_offset,
     src_lane: patch.src_lane,
     dst_lane: patch.dst_lane,
-    src_mult_min: normalizeMult(patch.src_mult_min),
-    src_mult_max: normalizeMult(patch.src_mult_max),
-    dst_mult_min: normalizeMult(patch.dst_mult_min),
-    dst_mult_max: normalizeMult(patch.dst_mult_max),
+    src_mult_min: "src_mult_min" in patch ? normalizeMult(patch.src_mult_min) : undefined,
+    src_mult_max: "src_mult_max" in patch ? normalizeMult(patch.src_mult_max) : undefined,
+    dst_mult_min: "dst_mult_min" in patch ? normalizeMult(patch.dst_mult_min) : undefined,
+    dst_mult_max: "dst_mult_max" in patch ? normalizeMult(patch.dst_mult_max) : undefined,
   });
 
   console.log("📤 [updateRelation] PATCH body:", { relationId, ...body });
