@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 
 export const SHEET = { CELL: 16 };
 
-export default function Sheet({ children, onCanvasClick, onCameraChange, onCursorMove, remoteCursors = [] }) {
+export default function Sheet({ children, onCanvasClick, onEmptyClick, onCameraChange, onCursorMove, remoteCursors = [] }) {
   const { CELL } = SHEET;
   const ref = useRef(null);
   const [cam, setCam] = useState(() => ({ x: 0, y: 0, z: 1 }));
@@ -72,8 +72,21 @@ export default function Sheet({ children, onCanvasClick, onCameraChange, onCurso
   }, [onMouseDown, onMouseMove, onMouseUp]);
 
   const handleClick = useCallback((e) => {
-    if (!onCanvasClick) return;
     if (moved.current) { moved.current = false; return; }
+
+    // Mismo criterio de "espacio vacío" que usa onMouseDown para el pan: un
+    // click que llegó hasta acá sin haber sido interceptado antes por una
+    // ClassCard (que sí burbujea, al ser un hijo del Sheet) es un click en
+    // el fondo del lienzo. onCanvasClick decide él mismo si hace algo con
+    // eso (solo crea una clase si el modo insertar está activo); onEmptyClick
+    // se dispara siempre en paralelo, para deseleccionar lo que hubiera
+    // elegido -- clase o relación -- igual que en Miro/draw.io: clickear el
+    // fondo limpia la selección aunque no se esté insertando nada.
+    if (e.target !== e.currentTarget && e.target !== ref.current?.firstElementChild) return;
+
+    onEmptyClick?.();
+
+    if (!onCanvasClick) return;
     const rect = ref.current?.getBoundingClientRect();
     if (!rect) return;
     const localX = e.clientX - rect.left;
@@ -83,7 +96,7 @@ export default function Sheet({ children, onCanvasClick, onCameraChange, onCurso
     const x_grid = Math.max(0, Math.round(worldPxX / CELL));
     const y_grid = Math.max(0, Math.round(worldPxY / CELL));
     onCanvasClick({ x_grid, y_grid });
-  }, [onCanvasClick, cam.x, cam.y, cam.z, CELL]);
+  }, [onCanvasClick, onEmptyClick, cam.x, cam.y, cam.z, CELL]);
 
   // Cursores en vivo (estilo Miro): reporto mi posición en coordenadas del
   // "mundo" del diagrama, la misma transformación que ya usa handleClick.

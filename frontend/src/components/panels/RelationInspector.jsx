@@ -1,13 +1,22 @@
 // src/components/panels/RelationInspector.jsx
 //
-// Panel derecho cuando hay una relación seleccionada. Se mantuvo la lógica
-// de guardado (fullUpdate manda siempre el objeto completo porque el PATCH
-// del backend interpreta los campos ausentes); lo que se rehízo es la
-// presentación: antes los cuatro campos de multiplicidad eran cajas sueltas
-// sin ninguna etiqueta y no se entendía cuál era cuál.
+// Panel derecho cuando hay una relación seleccionada. fullUpdate manda
+// siempre el objeto completo porque el PATCH del backend interpreta los
+// campos ausentes. Igual que el Inspector de clase, no hay botón "Guardar":
+// cada cambio se persiste solo, vía useAutoSave, que muestra el estado
+// (Guardando/Guardado) en el encabezado y el error en el panel si el
+// servidor lo rechaza, en vez de perderlo en un alert().
+//
+// También igual que el Inspector de clase, se puede plegar a una franja
+// angosta (el diagrama puede tener relaciones largas que cruzan medio
+// lienzo, y a veces el panel tapa justo la zona que se quiere ver).
 
 import { useState, useEffect } from "react";
 import Icon from "../common/Icon";
+import { SaveStatus, RowError } from "../common/SaveStatus";
+import useAutoSave from "../../hooks/useAutoSave";
+
+const COLLAPSE_KEY = "uml.relationInspector.collapsed";
 
 function useDebouncedCallback(callback, delay) {
   const [timeoutId, setTimeoutId] = useState(null);
@@ -101,27 +110,23 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
     relation?.dst_mult_max,
   ]);
 
-  const asideStyle = {
-    width: "var(--inspector-w)",
-    borderLeft: "1px solid var(--border)",
-    background: "var(--surface-1)",
-    display: "flex",
-    flexDirection: "column",
-    position: "relative",
-    zIndex: "var(--z-chrome)",
-  };
+  // Sin delay propio: los selects e inputs numéricos de este panel ya se
+  // guardan al toque (como siempre hicieron), y la etiqueta tiene su propio
+  // debounce manual más abajo antes de llegar acá. useAutoSave(0) solo
+  // aporta el estado visible (Guardando/Guardado/error), no un retraso.
+  //
+  // Se llama ACÁ, antes del early return de "no hay relación seleccionada"
+  // de más abajo: las reglas de hooks exigen que se invoquen siempre en el
+  // mismo orden en cada render, y ese return temprano es condicional.
+  const { save, status, error } = useAutoSave(0);
 
-  if (!relation) {
-    return (
-      <aside style={asideStyle}>
-        <div className="text-muted" style={{ margin: "auto", fontSize: 13 }}>
-          Seleccioná una relación para editarla.
-        </div>
-      </aside>
-    );
-  }
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem(COLLAPSE_KEY) === "1");
+  useEffect(() => {
+    localStorage.setItem(COLLAPSE_KEY, collapsed ? "1" : "0");
+  }, [collapsed]);
 
   const fullUpdate = (patch) => {
+    if (!relation) return;
     const body = {
       type: patch.type ?? relation.type,
       label: patch.label ?? localLabel ?? relation.label ?? "",
@@ -136,10 +141,56 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
       dst_mult_min: patch.dst_mult_min ?? (localMultDestinoMin === "" ? null : Number(localMultDestinoMin)),
       dst_mult_max: patch.dst_mult_max ?? (localMultDestinoMax === "*" ? null : Number(localMultDestinoMax)),
     };
-    onUpdate(body);
+    save(() => onUpdate(body));
   };
 
   const debouncedUpdate = useDebouncedCallback((val) => fullUpdate({ label: val }), 400);
+
+  const asideStyle = {
+    width: collapsed ? "var(--inspector-collapsed-w, 44px)" : "var(--inspector-w)",
+    borderLeft: "1px solid var(--border)",
+    background: "var(--surface-1)",
+    display: "flex",
+    flexDirection: "column",
+    position: "relative",
+    zIndex: "var(--z-chrome)",
+    transition: "width .15s ease",
+  };
+
+  const CollapseToggle = ({ style }) => (
+    <button
+      className="btn btn-ghost btn-icon btn-sm"
+      onClick={() => setCollapsed((v) => !v)}
+      title={collapsed ? "Desplegar panel" : "Plegar panel"}
+      style={style}
+    >
+      <Icon name={collapsed ? "chevronLeft" : "chevronRight"} size={14} />
+    </button>
+  );
+
+  // ---------- Plegado: franja angosta, sin importar si hay selección ----------
+  if (collapsed) {
+    return (
+      <aside style={asideStyle}>
+        <div style={{ padding: "var(--sp-3) var(--sp-2)", display: "flex", justifyContent: "center" }}>
+          <CollapseToggle />
+        </div>
+      </aside>
+    );
+  }
+
+  if (!relation) {
+    return (
+      <aside style={asideStyle}>
+        <div style={{ display: "flex", justifyContent: "flex-end", padding: "var(--sp-2) var(--sp-2) 0" }}>
+          <CollapseToggle />
+        </div>
+        <div className="text-muted" style={{ margin: "auto", fontSize: 13 }}>
+          Seleccioná una relación para editarla.
+        </div>
+      </aside>
+    );
+  }
 
   const tipoActual = TIPOS.find((t) => t.v === relation.type);
   const esHerenciaODependencia = ["INHERITANCE", "DEPENDENCY"].includes(relation.type);
@@ -147,17 +198,28 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
   return (
     <aside style={asideStyle}>
       {/* ---------- Encabezado ---------- */}
+      {/* El botón de plegar va en su PROPIA fila, separado del resto: el
+          panel tiene ancho fijo (var(--inspector-w)) y, con el ícono, el
+          título, el estado de guardado, el badge del tipo y "Eliminar" todos
+          compitiendo en una sola fila, el botón de plegar (al ser el último)
+          terminaba empujado fuera y oculto por overflow en pantallas de
+          ancho normal -- solo se veía en un viewport artificialmente ancho. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", padding: "var(--sp-2) var(--sp-2) 0" }}>
+        <CollapseToggle />
+      </div>
       <div
         style={{
           display: "flex",
           alignItems: "center",
           gap: "var(--sp-2)",
-          padding: "var(--sp-4)",
-          borderBottom: "1px solid var(--border)",
+          padding: "0 var(--sp-4) var(--sp-4)",
         }}
       >
-        <Icon name="relation" size={15} style={{ color: "var(--accent)" }} />
-        <strong style={{ fontSize: 13, flex: 1 }}>Relación</strong>
+        <Icon name="relation" size={15} style={{ color: "var(--accent)", flexShrink: 0 }} />
+        <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: "var(--sp-2)" }}>
+          <strong style={{ fontSize: 13, whiteSpace: "nowrap" }}>Relación</strong>
+          <SaveStatus status={status} />
+        </div>
         {tipoActual && (
           <span
             style={{
@@ -167,18 +229,30 @@ export default function RelationInspector({ relation, onUpdate, onDelete }) {
               borderRadius: 999,
               background: "var(--accent-soft)",
               color: "var(--accent)",
+              whiteSpace: "nowrap",
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              flexShrink: 1,
+              minWidth: 0,
             }}
           >
             {tipoActual.label}
           </span>
         )}
-        <button className="btn btn-danger-ghost btn-sm" onClick={onDelete} title="Eliminar esta relación">
+        <button
+          className="btn btn-danger-ghost btn-icon btn-sm"
+          onClick={onDelete}
+          title="Eliminar esta relación"
+          style={{ flexShrink: 0 }}
+        >
           <Icon name="trash" size={14} />
-          Eliminar
         </button>
       </div>
+      <div style={{ borderBottom: "1px solid var(--border)" }} />
 
       <div className="scroll" style={{ flex: 1, padding: "var(--sp-4)", display: "grid", gap: "var(--sp-5)", alignContent: "start" }}>
+        <RowError message={error} />
+
         {/* Quiénes se conectan */}
         <div
           style={{

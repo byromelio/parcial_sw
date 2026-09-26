@@ -290,32 +290,31 @@ export default function DiagramDashboard() {
 
   if (!diagram) return null;
 
+  // No atrapa el error acá: RelationInspector usa useAutoSave con esta
+  // función, que necesita que la promesa rechace para poder mostrar el
+  // estado "no se pudo guardar" en el panel en vez de un alert().
   const handleUpdateRelation = async (patch) => {
-    try {
-      const updated = await updateRelation(selectedRel.id, patch);
+    const updated = await updateRelation(selectedRel.id, patch);
 
-      // UML 2.5: una asociación muchos-a-muchos con atributos propios se
-      // modela como una clase de asociación explícita, no solo como una
-      // tabla intermedia invisible generada por Hibernate. Se ofrece la
-      // conversión apenas ambos lados quedan en "*" sobre una asociación
-      // simple entre dos clases distintas (self-relaciones recursivas ya
-      // se resuelven distinto, no aplica acá).
-      //
-      // El backend devuelve esta respuesta con los nombres de campo en
-      // español del ORM (origen_id/tipo/mult_origen_max), NO con los alias
-      // en inglés que sí usa el body al crear/actualizar -- son shapes
-      // distintos a propósito de este backend, no un typo.
-      const esMuchosAMuchos =
-        updated.tipo === "ASSOCIATION" &&
-        (updated.mult_origen_max === "*" || updated.mult_origen_max === null) &&
-        (updated.mult_destino_max === "*" || updated.mult_destino_max === null) &&
-        updated.origen_id !== updated.destino_id;
+    // UML 2.5: una asociación muchos-a-muchos con atributos propios se
+    // modela como una clase de asociación explícita, no solo como una
+    // tabla intermedia invisible generada por Hibernate. Se ofrece la
+    // conversión apenas ambos lados quedan en "*" sobre una asociación
+    // simple entre dos clases distintas (self-relaciones recursivas ya
+    // se resuelven distinto, no aplica acá).
+    //
+    // El backend devuelve esta respuesta con los nombres de campo en
+    // español del ORM (origen_id/tipo/mult_origen_max), NO con los alias
+    // en inglés que sí usa el body al crear/actualizar -- son shapes
+    // distintos a propósito de este backend, no un typo.
+    const esMuchosAMuchos =
+      updated.tipo === "ASSOCIATION" &&
+      (updated.mult_origen_max === "*" || updated.mult_origen_max === null) &&
+      (updated.mult_destino_max === "*" || updated.mult_destino_max === null) &&
+      updated.origen_id !== updated.destino_id;
 
-      if (esMuchosAMuchos) {
-        setAssociationCandidate(updated);
-      }
-    } catch {
-      alert("No se pudo actualizar la relación");
+    if (esMuchosAMuchos) {
+      setAssociationCandidate(updated);
     }
   };
 
@@ -510,6 +509,10 @@ export default function DiagramDashboard() {
 
           <Sheet
             onCanvasClick={handleCanvasClick}
+            onEmptyClick={() => {
+              setSelectedId(null);
+              setSelectedRelId(null);
+            }}
             onCameraChange={setCamera}
             onCursorMove={(x, y) => reportCursor(x, y, selected ? `editando ${selected.name}` : null)}
             remoteCursors={remoteCursors}

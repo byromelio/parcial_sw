@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react";
 import { updateClass } from "../../api/classes";
 import useAutoSave from "../../hooks/useAutoSave";
 import Icon from "../common/Icon";
+import { SaveStatus, RowError } from "../common/SaveStatus";
 
 const TYPE_OPTIONS = [
   { v: "string", label: "Texto (string)" },
@@ -26,37 +27,6 @@ const TYPE_OPTIONS = [
   { v: "uuid", label: "Identificador (uuid)" },
   { v: "email", label: "Correo (email)" },
 ];
-
-/** Indicador chico de estado de guardado. */
-function SaveStatus({ status }) {
-  if (status === "saving") {
-    return (
-      <span className="text-subtle" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11 }}>
-        <Icon name="loader" size={11} className="spinning" />
-        Guardando
-      </span>
-    );
-  }
-  if (status === "saved") {
-    return (
-      <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 11, color: "var(--success)" }}>
-        <Icon name="check" size={11} />
-        Guardado
-      </span>
-    );
-  }
-  return null;
-}
-
-function RowError({ message }) {
-  if (!message) return null;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--danger)" }}>
-      <Icon name="warning" size={12} />
-      {message}
-    </div>
-  );
-}
 
 /** Caja de un atributo: nombre, tipo y obligatoriedad. */
 function AttributeRow({ attr, onPatch, onRemove }) {
