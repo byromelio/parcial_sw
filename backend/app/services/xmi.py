@@ -388,7 +388,7 @@ def parse_xmi(xml_bytes: bytes) -> ImportResult:
                         lo = 1
                 elif tag == "upperValue":
                     v = child.get("value", "1")
-                    hi = None if v == "*" else int(v) if v.isdigit() else 1
+                    hi = None if v in ("*", "-1") else int(v) if v.isdigit() else 1
             return lo, hi
 
         src_name = _end_class_name(ends[0])
