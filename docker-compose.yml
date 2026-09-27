@@ -10,10 +10,12 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      # Volumen EXISTENTE del contenedor parcial_sw_pg (creado antes, suelto,
-      # fuera de este compose): se reusa tal cual para no perder los datos
-      # ya cargados. No es un volumen nuevo administrado por este archivo.
-      - de3f357261e2cb595086c1cf779679390045f2758cce495d781ab2200cc80a30:/var/lib/postgresql/data
+      # Volumen EXISTENTE creado antes, fuera de este compose: se reusa tal
+      # cual para no perder los datos ya cargados. El nombre real varia por
+      # entorno (en local es el hash largo autogenerado, en el EC2 de
+      # produccion es "parcial_sw_pgdata"), asi que se parametriza en vez de
+      # hardcodearlo -- cada entorno lo define en su propio .env.
+      - ${PG_VOLUME_NAME:-de3f357261e2cb595086c1cf779679390045f2758cce495d781ab2200cc80a30}:/var/lib/postgresql/data
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-parcial_sw}" ]
       interval: 5s
@@ -55,5 +57,5 @@ services:
       - "5173:80"
 
 volumes:
-  de3f357261e2cb595086c1cf779679390045f2758cce495d781ab2200cc80a30:
+  ${PG_VOLUME_NAME:-de3f357261e2cb595086c1cf779679390045f2758cce495d781ab2200cc80a30}:
     external: true
