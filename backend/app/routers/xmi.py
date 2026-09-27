@@ -79,9 +79,20 @@ async def import_xmi(
     summary = XmiImportSummary(warnings=list(parsed.warnings))
 
     # --- Clases + atributos ---
-    for ic in parsed.classes:
+    # Sin esto, create_class() usa x_grid=y_grid=0 para todas: las clases
+    # importadas quedan apiladas exactamente una sobre otra y el usuario
+    # tiene que reacomodarlas a mano antes de poder ver el diagrama. Una
+    # grilla simple (3 columnas, celdas generosas para que quepan clases
+    # con varios atributos) alcanza para que el resultado sea usable de
+    # entrada; el usuario siempre puede reacomodar despues.
+    COLS, COL_W, ROW_H = 3, 18, 16
+    for idx, ic in enumerate(parsed.classes):
         try:
-            executor.create_class(name=ic.name)
+            executor.create_class(
+                name=ic.name,
+                x_grid=(idx % COLS) * COL_W,
+                y_grid=(idx // COLS) * ROW_H,
+            )
             summary.classes_created.append(ic.name)
         except ToolError:
             summary.classes_skipped.append(ic.name)  # ya existia en el diagrama
