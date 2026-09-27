@@ -25,6 +25,8 @@ class RelacionCreate(BaseModel):
     dst_mult_min: Optional[int] = 1
     dst_mult_max: Optional[Union[int, Literal["*"]]] = None
 
+    es_clase_asociacion: bool = False
+
     @field_validator("src_offset", "dst_offset", "src_lane", "dst_lane", "src_mult_min", "dst_mult_min")
     @classmethod
     def non_negative(cls, v: Optional[int]) -> Optional[int]:
@@ -122,6 +124,8 @@ class RelacionOut(BaseModel):
     src_mult_max: Optional[Union[int, str]] = Field(alias="mult_origen_max")
     dst_mult_min: Optional[int] = Field(alias="mult_destino_min")
     dst_mult_max: Optional[Union[int, str]] = Field(alias="mult_destino_max")
+
+    es_clase_asociacion: bool = False
 
     # 🔹 Nombres de las clases
     origen_nombre: str

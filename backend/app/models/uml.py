@@ -129,6 +129,12 @@ class Relacion(Base):
     mult_destino_min: Mapped[int]        = mapped_column(Integer, nullable=False, server_default="1")
     mult_destino_max: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)   # NULL = *
 
+    # True en las dos relaciones que unen una clase de asociacion (muchos-a-
+    # muchos con atributos propios) con las clases originales: el frontend
+    # las dibuja punteadas, como corresponde a UML, en vez de como una
+    # asociacion solida cualquiera.
+    es_clase_asociacion: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+
 
 
 

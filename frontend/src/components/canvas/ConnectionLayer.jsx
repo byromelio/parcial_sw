@@ -141,6 +141,7 @@ export default function ConnectionLayer({
     dstMin: r.dst_mult_min ?? r.mult_destino_min ?? 1,
     dstMax: r.dst_mult_max ?? r.mult_destino_max ?? null,
     label: r.label ?? r.etiqueta ?? null,
+    esClaseAsociacion: r.es_clase_asociacion ?? false,
   });
 
   const fmtMult = (min, max) => `${min ?? 0}..${max == null ? "*" : max}`;
@@ -274,6 +275,10 @@ export default function ConnectionLayer({
         switch (seg.type) {
           case "ASSOCIATION":
             markerEnd = null;
+            // UML: la linea que une una clase de asociacion (muchos-a-
+            // muchos con atributos propios) con las clases originales se
+            // dibuja punteada, para distinguirla de una asociacion comun.
+            if (seg.esClaseAsociacion) lineProps.strokeDasharray = "6,4";
             break;
           case "INHERITANCE":
           case "GENERALIZATION":

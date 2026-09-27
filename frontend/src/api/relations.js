@@ -48,6 +48,7 @@ export const createRelation = (diagramId, params) => {
     src_mult_max: normalizeMult(params.src_mult_max),
     dst_mult_min: normalizeMult(params.dst_mult_min),
     dst_mult_max: normalizeMult(params.dst_mult_max),
+    es_clase_asociacion: params.es_clase_asociacion,
   });
 
   console.log("📤 [createRelation] POST body:", body);

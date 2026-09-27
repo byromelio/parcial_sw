@@ -76,6 +76,7 @@ async def create_relation(
             mult_origen_max=body.src_mult_max,
             mult_destino_min=body.dst_mult_min,
             mult_destino_max=body.dst_mult_max,
+            es_clase_asociacion=body.es_clase_asociacion,
         )
         db.add(r)
         d.updated_at = func.now()
@@ -247,6 +248,7 @@ def get_relation(
         "src_mult_max": r.mult_origen_max,
         "dst_mult_min": r.mult_destino_min,
         "dst_mult_max": r.mult_destino_max,
+        "es_clase_asociacion": r.es_clase_asociacion,
         "origen_nombre": origen_nombre,
         "destino_nombre": destino_nombre,
     }

@@ -344,6 +344,7 @@ export default function DiagramDashboard() {
         type: "ASSOCIATION",
         src_mult_min: 1, src_mult_max: 1,
         dst_mult_min: 0, dst_mult_max: "*",
+        es_clase_asociacion: true,
       });
       await createRelation({
         from_class: intermedia.id,
@@ -351,6 +352,7 @@ export default function DiagramDashboard() {
         type: "ASSOCIATION",
         src_mult_min: 0, src_mult_max: "*",
         dst_mult_min: 1, dst_mult_max: 1,
+        es_clase_asociacion: true,
       });
 
       // Se usa el DELETE directo (no el deleteRelation del hook) porque ese
