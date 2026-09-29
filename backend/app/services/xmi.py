@@ -184,10 +184,17 @@ class ImportedAttribute:
 
 
 @dataclass
+class ImportedMethod:
+    name: str
+    return_type: str = "void"
+
+
+@dataclass
 class ImportedClass:
     xmi_id: str
     name: str
     attributes: list[ImportedAttribute] = field(default_factory=list)
+    methods: list[ImportedMethod] = field(default_factory=list)
 
 
 @dataclass
@@ -265,6 +272,39 @@ def _resolve_type_name(attr_el: ET.Element, by_id: dict[str, ET.Element]) -> str
     return _FROM_UML_PRIMITIVE.get(key) or _FROM_LOCAL_DATATYPE.get(key) or "string"
 
 
+def _resolve_return_type(op_el: ET.Element, by_id: dict[str, ET.Element]) -> str:
+    """El tipo de retorno de un ownedOperation viaja en un ownedParameter
+    hijo con direction="return" (no en la propia operation), y suele
+    referenciar el tipo via el atributo plano 'type' (ej. "EAnone_void"
+    para sin retorno) en vez de href/idref como los atributos normales."""
+    for param_el in op_el:
+        if _local(param_el.tag) != "ownedParameter":
+            continue
+        if param_el.get("direction") != "return":
+            continue
+        raw = param_el.get("type")
+        if not raw:
+            type_el = None
+            for child in param_el:
+                if _local(child.tag) == "type":
+                    type_el = child
+                    break
+            if type_el is not None:
+                href = type_el.get("href")
+                idref = type_el.get(f"{{{XMI_NS}}}idref") or type_el.get("xmi:idref")
+                if href:
+                    raw = href.rsplit("#", 1)[-1]
+                elif idref and idref in by_id:
+                    raw = by_id[idref].get("name")
+        if not raw:
+            return "void"
+        key = raw.strip().lower()
+        if "void" in key or key.endswith("_void"):
+            return "void"
+        return _FROM_UML_PRIMITIVE.get(key) or _FROM_LOCAL_DATATYPE.get(key) or raw
+    return "void"
+
+
 def parse_xmi(xml_bytes: bytes) -> ImportResult:
     result = ImportResult()
     try:
@@ -304,6 +344,16 @@ def parse_xmi(xml_bytes: bytes) -> ImportResult:
                 name=attr_name,
                 type=_resolve_type_name(attr_el, by_id),
                 required=required,
+            ))
+        for op_el in el:
+            if _local(op_el.tag) != "ownedOperation":
+                continue
+            op_name = op_el.get("name")
+            if not op_name:
+                continue
+            ic.methods.append(ImportedMethod(
+                name=op_name,
+                return_type=_resolve_return_type(op_el, by_id),
             ))
         classes_by_id[xid] = ic
         name_by_id[xid] = name

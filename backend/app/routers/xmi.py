@@ -107,6 +107,16 @@ async def import_xmi(
                 summary.attributes_skipped += 1
                 logger.info(f"[XMI import] atributo omitido: {e}")
 
+        for method in ic.methods:
+            try:
+                executor.add_method(
+                    class_name=ic.name, name=method.name, return_type=method.return_type,
+                )
+                summary.methods_created += 1
+            except ToolError as e:
+                summary.methods_skipped += 1
+                logger.info(f"[XMI import] metodo omitido: {e}")
+
     # --- Relaciones ---
     # DiagramToolExecutor.create_relation no chequea duplicados a proposito:
     # el asistente de IA puede querer una segunda relacion (distinto tipo)

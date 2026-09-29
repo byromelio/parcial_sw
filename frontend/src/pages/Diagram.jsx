@@ -83,6 +83,7 @@ export default function DiagramDashboard() {
       const partes = [
         s.classes_created.length ? `${s.classes_created.length} clase(s)` : null,
         s.attributes_created ? `${s.attributes_created} atributo(s)` : null,
+        s.methods_created ? `${s.methods_created} método(s)` : null,
         s.relations_created ? `${s.relations_created} relación(es)` : null,
       ].filter(Boolean);
       const omitidas = s.classes_skipped.length ? ` (${s.classes_skipped.length} clase(s) ya existían)` : "";
