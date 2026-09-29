@@ -112,6 +112,31 @@ def build_xmi(diagram) -> bytes:
                     "href": _PRIMITIVE_HREF.format(name="String"),
                 })
 
+        for m in c.metodos:
+            op_el = ET.SubElement(el, "ownedOperation", {
+                f"{{{XMI_NS}}}id": f"M_{m.id}",
+                "name": m.nombre,
+                "visibility": "public",
+            })
+            ret = (m.tipo_retorno or "void").strip().lower()
+            if ret == "void":
+                ET.SubElement(op_el, "ownedParameter", {
+                    f"{{{XMI_NS}}}id": f"MR_{m.id}",
+                    "name": "return",
+                    "direction": "return",
+                    "type": "EAnone_void",
+                })
+            else:
+                param_el = ET.SubElement(op_el, "ownedParameter", {
+                    f"{{{XMI_NS}}}id": f"MR_{m.id}",
+                    "name": "return",
+                    "direction": "return",
+                })
+                ET.SubElement(param_el, "type", {
+                    f"{{{XMI_NS}}}type": "uml:PrimitiveType",
+                    "href": _PRIMITIVE_HREF.format(name=_TO_UML_PRIMITIVE.get(ret, "String")),
+                })
+
         # Herencia: generalization vive DENTRO del elemento hijo (origen).
         for r in c.outgoing_relations:
             if r.tipo == RelType.INHERITANCE:
