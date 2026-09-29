@@ -210,16 +210,27 @@ def build_xmi(diagram) -> bytes:
     diagram_el = ET.SubElement(diagrams_el, "diagram", {f"{{{XMI_NS}}}id": "DIAG_1"})
     ET.SubElement(diagram_el, "model", {"package": package_id, "localID": "1", "owner": package_id})
     ET.SubElement(diagram_el, "properties", {"name": diagram.title or "diagram", "type": "Logical"})
+    ET.SubElement(diagram_el, "project", {"author": "System", "version": "1.0"})
+    ET.SubElement(diagram_el, "style1", {"value": "ShowPrivate=1;ShowProtected=1;ShowPublic=1;HideRelationships=0;Locked=0;Border=1;HighlightForeign=1;PackageContents=1;SequenceNotes=0;ScalePrintImage=0;PPgs.cx=1;PPgs.cy=1;DocSize.cx=827;DocSize.cy=1169;ShowDetails=0;Orientation=P;Zoom=100;ShowTags=0;OpParams=1;VisibleAttributeDetail=0;ShowOpRetType=1;ShowIcons=1;CollabNums=0;HideProps=0;ShowReqs=0;ShowCons=0;PaperSize=9;HideParents=0;UseAlias=0;HideAtts=0;HideOps=0;HideStereo=0;HideElemStereo=0;ShowTests=0;ShowMaint=0;ConnectorNotation=UML 2.1;ExplicitNavigability=0;ShowShape=1;AdvancedElementProps=1;AdvancedFeatureProps=1;AdvancedConnectorProps=1;m_bElementClassifier=1;ShowNotes=0;SuppressBrackets=0;SuppConnectorLabels=0;PrintPageHeadFoot=0;ShowAsList=0;"})
+    ET.SubElement(diagram_el, "style2", {"value": "SaveTag=0E500A58;"})
+    ET.SubElement(diagram_el, "swimlanes", {"value": "locked=false;orientation=0;width=0;inbar=false;palette=0;backcolor=0;clearcolors=0;showwtext=0;wordwrap=0;coridor=0;"})
+    ET.SubElement(diagram_el, "matrixitems", {"value": "locked=false;matrixactive=false;swimlanesactive=true;kanbanactive=false;width=1;clrLine=0;"})
+    ET.SubElement(diagram_el, "extendedProperties")
+
     diagram_elements = ET.SubElement(diagram_el, "elements")
     for seqno, c in enumerate(diagram.classes, start=1):
+        # EA coord limits (usually positive for Left/Right, negative for Top/Bottom, or just normal Cartesian)
+        # Assuming grid based
         left = c.x_grid * GRID_PX
         top = c.y_grid * GRID_PX
         right = left + c.w_grid * GRID_PX
         bottom = top + c.h_grid * GRID_PX
+        
         ET.SubElement(diagram_elements, "element", {
             "geometry": f"Left={left};Top={top};Right={right};Bottom={bottom};",
             "subject": class_ids[c.id],
             "seqno": str(seqno),
+            "style": f"DUID={class_ids[c.id][:8]};"
         })
 
     ET.indent(root, space="  ")
