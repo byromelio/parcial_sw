@@ -124,9 +124,58 @@ El backend que exporta el diagramador (`POST /diagrams/{id}/export-download`) **
 - **El certificado vive solo en la instancia**: si se recrea la instancia desde cero, hay que volver a correr `certbot certonly --standalone` (con el contenedor de frontend detenido momentáneamente para liberar el puerto 80).
 - **`docker-compose.prod.yml` no trackea cambios en `.env` automáticamente**: después de editar `.env` en la instancia, hay que reconstruir con `--build` para que el backend tome las nuevas variables (los contenedores no releen `.env` en caliente).
 
-## 10. Reglas para futuras sesiones
+## 10. Incidente del 26-27/09/2026: contenedores de dev pisaron los de producción
+
+Durante una sesión de debugging de import/export XMI se corrió varias veces
+`docker compose build backend` / `docker compose up -d backend` **sin** el
+flag `-f docker-compose.prod.yml`, confiando en que el archivo por defecto
+(`docker-compose.yml`, el de desarrollo) bastaba. Como ambos compose usan los
+mismos nombres de contenedor (`uml-diagramador-backend`,
+`uml-diagramador-frontend`, `uml-diagramador-db`), Docker Compose reemplazó
+silenciosamente los contenedores de producción por las versiones de
+desarrollo: el frontend volvió a publicar `5173:80` sin HTTPS en vez de
+`80:443` con el nginx+certbot de `Dockerfile.prod`, y el sitio público
+empezó a devolver `ERR_CONNECTION_REFUSED` (nada escuchando en 80/443:
+`sudo ss -tlnp | grep -E ':443|:80'` daba vacío). No hubo ningún error
+visible en el momento del `build`/`up` — el build y el arranque del
+contenedor de dev fueron exitosos, solo que era el compose equivocado.
+
+**Lección**: la sección 3/5/10 de este documento ya advertía usar siempre
+`-f docker-compose.prod.yml` en la instancia, pero en el fragor de un
+debugging puntual (enfocado en un bug de backend, no en el despliegue en
+sí) se corrieron comandos de memoria sin releer este archivo primero. Antes
+de tocar Docker en el EC2, releer este documento — en particular, **nunca
+correr `docker compose build/up/down/logs` en la instancia sin
+`-f docker-compose.prod.yml` explícito**, ni siquiera "solo para probar
+algo rápido".
+
+También se confirmó que verificar "el rebuild tomó el código nuevo" solo
+por el `build` sin error NO alcanza: hace falta `docker exec
+<contenedor> grep <patrón-del-cambio> <archivo>` para confirmar que el
+contenedor que quedó corriendo realmente tiene el código nuevo adentro. En
+un caso puntual de esta sesión, un `build` exitoso quedó sin efecto porque
+el `up -d` fallaba después por un volumen externo no encontrado
+(`PG_VOLUME_NAME`, ver más abajo) — el contenedor viejo seguía corriendo y
+nada lo avisaba salvo revisar el contenido real dentro del contenedor.
+
+### Nombre del volumen de Postgres: solo relevante para desarrollo local
+
+El `docker-compose.yml` de **desarrollo** (no el `.prod.yml`) tenía el
+nombre del volumen externo de Postgres hardcodeado con el hash autogenerado
+del entorno local de quien lo escribió originalmente. Se parametrizó con
+`PG_VOLUME_NAME` (default a ese hash) más la clave lógica `pgdata:` +
+`name: ${PG_VOLUME_NAME:-...}` en la sección `volumes:` top-level — Compose
+no permite interpolar variables directo en el *nombre de la clave* de un
+volumen, pero sí en su propiedad `name`. Esto **no afecta a
+`docker-compose.prod.yml`**, que ya declaraba el volumen simplemente como
+`pgdata:` sin ser `external`, así que no necesita ninguna variable extra.
+
+## 11. Reglas para futuras sesiones
 
 - No asumir que la instancia sigue arriba sin verificarlo (`curl -s -o /dev/null -w "%{http_code}" https://parcial-sw.duckdns.org`) antes de dar por hecho que "todo funciona".
 - No editar código directo en la instancia vía SSH — siempre local → commit → push → pull en la instancia → rebuild. La única excepción son operaciones puntuales de datos (crear un usuario, un `INSERT` de prueba), nunca cambios de código fuente.
 - Si se cambia algo del pipeline de `exporters/` (lo que genera el backend Spring Boot), no hace falta redesplegar la instancia del diagramador — ese cambio solo afecta al próximo backend que se exporte, no a nada que ya esté corriendo.
 - Antes de dar instrucciones de "correr esto en tu terminal", confirmar si el usuario está en la terminal SSH (instancia) o en su terminal local — son entornos distintos y los comandos no son intercambiables (rutas, `sudo`, disponibilidad de `flutter`/`docker`, etc.).
+- **Todo comando `docker compose` en la instancia lleva `-f docker-compose.prod.yml` explícito, sin excepción** — ni para "probar algo rápido". Confundirse de archivo no tira ningún error, solo reemplaza en silencio los contenedores de producción por los de desarrollo (ver sección 10).
+- Un `docker compose build` sin errores no prueba que el rebuild se aplicó: si el `up -d` posterior falla (por ejemplo por un volumen externo no encontrado) el contenedor viejo sigue corriendo. La forma confiable de verificar es `docker exec <contenedor> grep <algo-del-cambio-nuevo> <archivo>` sobre el contenedor ya corriendo, no solo mirar que `build` haya terminado bien.
+- Si el sitio público empieza a dar `ERR_CONNECTION_REFUSED`, antes de sospechar de DNS o del código, correr `sudo ss -tlnp | grep -E ':443|:80'` en la instancia: si no hay nada escuchando ahí, es casi seguro que se corrió Docker Compose sin `-f docker-compose.prod.yml` y se pisó el nginx con HTTPS.

@@ -36,5 +36,11 @@ backups/
 # Cache/metadata de herramientas locales (no es código del proyecto)
 .atl/
 
+# Config de MCP servers para asistentes de IA: tiene rutas absolutas
+# específicas de cada máquina (ej. la instalación local de Enterprise
+# Architect), no portable entre desarrolladores.
+.agents/
+opencode.jsonc
+
 # Enterprise Architect: lock file temporal, se regenera solo al abrir el proyecto
 *.ldb
