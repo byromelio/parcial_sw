@@ -233,7 +233,7 @@ export default function ConnectionLayer({
               <path d="M 0 0.5 L 9 5 L 0 9.5 z" fill={color} />
             </marker>
             <marker id={`arrow-hollow${suffix}`} viewBox="0 0 22 16" refX="20" refY="8" markerWidth="10" markerHeight="7.5" orient="auto-start-reverse">
-              <path d="M 1 8 L 20 1 L 20 15 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
+              <path d="M 20 8 L 1 1 L 1 15 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
             </marker>
             <marker id={`diamond-hollow${suffix}`} viewBox="0 0 24 14" refX="22" refY="7" markerWidth="11" markerHeight="6.5" orient="auto-start-reverse">
               <path d="M 1 7 L 12 1 L 23 7 L 12 13 z" fill="var(--surface-1)" stroke={color} strokeWidth="1.6" strokeLinejoin="round" />
@@ -304,14 +304,24 @@ export default function ConnectionLayer({
           fill: isSelected ? SELECTED_COLOR : "var(--text-muted)",
         };
 
+        // UML: herencia y dependencia no llevan multiplicidad (un
+        // subtipo es exactamente uno del supertipo, y una dependencia es
+        // un uso puntual, no una cardinalidad) -- mismo criterio que ya
+        // aplica RelationInspector para ocultar esos campos en el panel.
+        const sinMultiplicidad = seg.type === "INHERITANCE" || seg.type === "DEPENDENCY";
+
         const labels = (
           <>
-            <text x={a.x + so.dx} y={a.y + so.dy} fontSize="10" textAnchor={so.anchor} style={labelStyle}>
-              {fmtMult(seg.srcMin, seg.srcMax)}
-            </text>
-            <text x={b.x + dof.dx} y={b.y + dof.dy} fontSize="10" textAnchor={dof.anchor} style={labelStyle}>
-              {fmtMult(seg.dstMin, seg.dstMax)}
-            </text>
+            {!sinMultiplicidad && (
+              <>
+                <text x={a.x + so.dx} y={a.y + so.dy} fontSize="10" textAnchor={so.anchor} style={labelStyle}>
+                  {fmtMult(seg.srcMin, seg.srcMax)}
+                </text>
+                <text x={b.x + dof.dx} y={b.y + dof.dy} fontSize="10" textAnchor={dof.anchor} style={labelStyle}>
+                  {fmtMult(seg.dstMin, seg.dstMax)}
+                </text>
+              </>
+            )}
             {seg.label && (
               <text x={mid.x} y={mid.y - 6} fontSize="10" textAnchor="middle" style={labelStyle}>
                 {seg.label}
