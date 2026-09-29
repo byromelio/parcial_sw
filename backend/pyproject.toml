@@ -19,3 +19,7 @@ dependencies = [
   "pydantic[email]",
   "google-genai",
 ]
+
+[tool.pyright]
+include = ["app"]
+extraPaths = ["."]
