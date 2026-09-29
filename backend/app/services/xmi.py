@@ -169,29 +169,32 @@ def build_xmi(diagram) -> bytes:
         ET.SubElement(end2, "lowerValue", {f"{{{XMI_NS}}}type": "uml:LiteralInteger", "value": _mult(r.mult_destino_min)})
         ET.SubElement(end2, "upperValue", {f"{{{XMI_NS}}}type": "uml:LiteralUnlimitedNatural", "value": _mult(r.mult_destino_max)})
 
-    # Extension propietaria de Enterprise Architect: sin esto, EA importa el
-    # modelo (paquetes/clases/relaciones) correctamente pero no tiene de
-    # donde sacar QUE elementos van en el diagrama ni en que posicion --
-    # el usuario terminaba con el arbol de clases bien creado pero el
-    # canvas del diagrama vacio, y tenia que arrastrar todo a mano. El
-    # multiplicador GRID_PX convierte las celdas de grilla que usa el
-    # editor web (x_grid/y_grid/w_grid/h_grid) a pixeles, la unidad que
-    # espera el atributo "rect" de <object> en este formato de EA.
+    # UML Diagram Interchange (parte del estandar XMI 2.1, no una extension
+    # propietaria): a diferencia del formato nativo de EA (que referencia
+    # GUIDs que EA recien asigna DESPUES de importar, y por eso nunca
+    # coinciden con los que generamos nosotros), este mecanismo define el
+    # diagrama con uml:Diagram/uml:Shape que apuntan a los mismos xmi:id
+    # que ya usamos arriba para cada packagedElement -- el ID es nuestro
+    # desde el vamos, no hay orden de eventos imposible que resolver.
+    # GRID_PX convierte las celdas de grilla del editor web
+    # (x_grid/y_grid/w_grid/h_grid) a las unidades de "bounds".
     GRID_PX = 20
-    ext = ET.SubElement(root, f"{{{XMI_NS}}}Extension", {"extender": "Enterprise Architect", "extenderID": "6.5"})
-    diagrams_el = ET.SubElement(ext, "diagrams")
-    diagram_el = ET.SubElement(diagrams_el, "diagram", {f"{{{XMI_NS}}}id": "DIAG_1"})
-    ET.SubElement(diagram_el, "model", {"package": "model_1", "localID": "1", "owner": "model_1"})
-    ET.SubElement(diagram_el, "properties", {"name": diagram.title or "diagram", "type": "Logical"})
+    diagram_el = ET.SubElement(model, "packagedElement", {
+        f"{{{XMI_NS}}}type": "uml:Diagram",
+        f"{{{XMI_NS}}}id": "DIAG_1",
+        "name": diagram.title or "diagram",
+    })
     for c in diagram.classes:
-        left = c.x_grid * GRID_PX
-        top = c.y_grid * GRID_PX
-        right = left + c.w_grid * GRID_PX
-        bottom = top + c.h_grid * GRID_PX
-        ET.SubElement(diagram_el, "element", {
-            "geometry": f"Left={left};Top={top};Right={right};Bottom={bottom};",
+        shape = ET.SubElement(diagram_el, "shape", {
+            f"{{{XMI_NS}}}type": "uml:Shape",
+            f"{{{XMI_NS}}}id": f"SHAPE_{c.id}",
             "subject": class_ids[c.id],
-            "seqno": "0",
+        })
+        ET.SubElement(shape, "bounds", {
+            "x": str(c.x_grid * GRID_PX),
+            "y": str(c.y_grid * GRID_PX),
+            "width": str(c.w_grid * GRID_PX),
+            "height": str(c.h_grid * GRID_PX),
         })
 
     ET.indent(root, space="  ")
