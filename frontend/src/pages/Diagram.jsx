@@ -86,23 +86,14 @@ export default function DiagramDashboard() {
         s.relations_created ? `${s.relations_created} relación(es)` : null,
       ].filter(Boolean);
       const omitidas = s.classes_skipped.length ? ` (${s.classes_skipped.length} clase(s) ya existían)` : "";
-      // Los warnings (elementos no soportados, multiplicidad asumida, etc.)
-      // se muestran en el mismo aviso: el import no navega a otra pantalla,
-      // asi que no hace falta guardarlos aparte para leerlos despues.
-      const advertencia = s.warnings?.length ? ` ${s.warnings.length} advertencia(s): ${s.warnings.join(" ")}` : "";
       setAviso({
         tipo: "ok",
         texto: partes.length
-          ? `Importado desde XMI: ${partes.join(", ")}${omitidas}.${advertencia}`
-          : `No se importó nada nuevo${omitidas}.${advertencia}`,
+          ? `Importado desde XMI: ${partes.join(", ")}${omitidas}.`
+          : `No se importó nada nuevo${omitidas}.`,
       });
     } catch (err) {
-      // El backend devuelve HTTPException(400, {detail, code}): FastAPI
-      // anida eso dentro de response.data.detail (el campo "detail" es el
-      // nombre reservado que usa HTTPException para el body completo).
-      const body = err?.response?.data?.detail;
-      const message = typeof body === "string" ? body : body?.detail;
-      setAviso({ tipo: "error", texto: message || "No se pudo importar el archivo XMI" });
+      setAviso({ tipo: "error", texto: err?.response?.data?.detail || "No se pudo importar el archivo XMI" });
     } finally {
       setImportingXmi(false);
     }

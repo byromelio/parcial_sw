@@ -23,7 +23,7 @@ from app.models.uml import Relacion
 from app.models.user import User
 from app.schemas.xmi import XmiImportSummary
 from app.services.ai_tools import DiagramToolExecutor, ToolError
-from app.services.xmi import GRID_PX, InvalidXmiError, UnsupportedXmiError, build_xmi, parse_xmi
+from app.services.xmi import build_xmi, parse_xmi
 from ._helpers import get_my_diagram
 
 logger = logging.getLogger(__name__)
@@ -64,32 +64,35 @@ async def import_xmi(
 ):
     diagram = get_my_diagram(db, me, diagram_id)
     content = await file.read()
+    if not content:
+        raise HTTPException(400, "El archivo esta vacio")
 
-    try:
-        parsed = parse_xmi(content)
-    except InvalidXmiError as e:
-        raise HTTPException(400, {"detail": str(e), "code": "invalid_xmi"}) from e
-    except UnsupportedXmiError as e:
-        raise HTTPException(400, {"detail": str(e), "code": "unsupported_xmi"}) from e
+    parsed = parse_xmi(content)
+    if not parsed.classes and not parsed.relations:
+        raise HTTPException(
+            400,
+            "No se encontro ninguna clase ni relacion reconocible en el archivo XMI. "
+            + " ".join(parsed.warnings),
+        )
 
     executor = DiagramToolExecutor(db, diagram)
     summary = XmiImportSummary(warnings=list(parsed.warnings))
 
     # --- Clases + atributos ---
-    # Si el XMI trae posicion de diagrama (extension de EA), se respeta
-    # esa posicion (convertida de pixeles a celdas de grilla) en vez de
-    # apilar todo con una grilla generica -- asi un archivo exportado por
-    # este mismo sistema, editado en EA y reimportado, conserva el layout
-    # que el usuario armo en EA. Si el XMI no trae posiciones (ej. viene de
-    # otra herramienta), se cae a la grilla de siempre.
+    # Sin esto, create_class() usa x_grid=y_grid=0 para todas: las clases
+    # importadas quedan apiladas exactamente una sobre otra y el usuario
+    # tiene que reacomodarlas a mano antes de poder ver el diagrama. Una
+    # grilla simple (3 columnas, celdas generosas para que quepan clases
+    # con varios atributos) alcanza para que el resultado sea usable de
+    # entrada; el usuario siempre puede reacomodar despues.
     COLS, COL_W, ROW_H = 3, 18, 16
     for idx, ic in enumerate(parsed.classes):
-        if ic.x is not None and ic.y is not None:
-            x_grid, y_grid = ic.x // GRID_PX, ic.y // GRID_PX
-        else:
-            x_grid, y_grid = (idx % COLS) * COL_W, (idx // COLS) * ROW_H
         try:
-            executor.create_class(name=ic.name, x_grid=x_grid, y_grid=y_grid)
+            executor.create_class(
+                name=ic.name,
+                x_grid=(idx % COLS) * COL_W,
+                y_grid=(idx // COLS) * ROW_H,
+            )
             summary.classes_created.append(ic.name)
         except ToolError:
             summary.classes_skipped.append(ic.name)  # ya existia en el diagrama

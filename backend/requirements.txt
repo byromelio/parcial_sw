@@ -1,5 +1,4 @@
 alembic==1.13.2
-defusedxml==0.7.1
 google-genai
 annotated-types==0.7.0
 anyio==4.11.0
