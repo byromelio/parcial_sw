@@ -56,7 +56,6 @@ que se hizo con prueba.xmi para el resto de este modulo.
 """
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from xml.etree import ElementTree as ET
 
@@ -127,14 +126,6 @@ GRID_PX = 20
 
 def _mult(value: int | None) -> str:
     return "*" if value is None else str(value)
-
-
-def _slug_id(raw_uuid) -> str:
-    """UUID de nuestro modelo -> id corto y estable para usar en xmi.id,
-    determinista (mismo elemento, mismo id, siempre) sin depender de
-    azar: dos exports seguidos del mismo diagrama sin cambios producen
-    el mismo archivo byte a byte."""
-    return re.sub(r"[^0-9a-fA-F]", "", str(raw_uuid))[:32]
 
 
 # =====================================================================
@@ -217,15 +208,20 @@ def build_xmi(diagram) -> bytes:
     XMI 1.1: ese formato solo lo exige la funcion "Merge" de EA, una
     funcionalidad distinta de "Import Package from XML")."""
 
+    # IDs con el mismo formato (con guiones, prefijo C_/A_/AS_/E1_/E2_) que
+    # el archivo confirmado funcionando en un EA real -- una version previa
+    # de esta funcion los cambio a "EAID_" sin guiones y el import dejo de
+    # colocar las clases en el diagrama; revertido a proposito, no se
+    # identifico con certeza cual de los dos cambios (formato de id vs los
+    # demas de abajo) era la causa real, asi que se igualo todo.
     classes = list(diagram.classes)
-    class_ids = {c.id: f"EAID_{_slug_id(c.id)}" for c in classes}
+    class_ids = {c.id: f"C_{c.id}" for c in classes}
     used_datatypes: set[str] = set()
 
     xmi_root = ET.Element(f"{{{XMI_NS}}}XMI", {f"{{{XMI_NS}}}version": "2.1"})
-    ET.SubElement(xmi_root, f"{{{XMI_NS}}}Documentation", {"exporter": "parcial_sw", "exporterVersion": "1.0"})
 
     model_el = ET.SubElement(xmi_root, f"{{{UML_NS}}}Model", {
-        f"{{{XMI_NS}}}type": "uml:Model", "name": "EA_Model", "visibility": "public",
+        f"{{{XMI_NS}}}type": "uml:Model", f"{{{XMI_NS}}}id": "model_1", "name": "EA_Model",
     })
 
     package_id = "PKG_root"
@@ -233,7 +229,6 @@ def build_xmi(diagram) -> bytes:
         f"{{{XMI_NS}}}type": "uml:Package",
         f"{{{XMI_NS}}}id": package_id,
         "name": diagram.title or "diagram",
-        "visibility": "public",
     })
 
     for c in classes:
@@ -241,13 +236,12 @@ def build_xmi(diagram) -> bytes:
             f"{{{XMI_NS}}}type": "uml:Class",
             f"{{{XMI_NS}}}id": class_ids[c.id],
             "name": c.nombre,
-            "visibility": "public",
         })
         for a in c.atributos:
             tipo = (a.tipo or "string").strip().lower()
             attr_el = ET.SubElement(class_el, "ownedAttribute", {
                 f"{{{XMI_NS}}}type": "uml:Property",
-                f"{{{XMI_NS}}}id": f"EAID_{_slug_id(a.id)}",
+                f"{{{XMI_NS}}}id": f"A_{a.id}",
                 "name": a.nombre,
                 "visibility": "private",
             })
@@ -263,7 +257,7 @@ def build_xmi(diagram) -> bytes:
         for r in c.outgoing_relations:
             if r.tipo == RelType.INHERITANCE:
                 ET.SubElement(class_el, "generalization", {
-                    f"{{{XMI_NS}}}id": f"G_{_slug_id(r.id)}",
+                    f"{{{XMI_NS}}}id": f"G_{r.id}",
                     "general": class_ids[r.destino_id],
                 })
 
@@ -281,7 +275,7 @@ def build_xmi(diagram) -> bytes:
         if r.tipo == RelType.DEPENDENCY:
             ET.SubElement(package_el, "packagedElement", {
                 f"{{{XMI_NS}}}type": "uml:Dependency",
-                f"{{{XMI_NS}}}id": f"D_{_slug_id(r.id)}",
+                f"{{{XMI_NS}}}id": f"D_{r.id}",
                 "client": class_ids[r.origen_id],
                 "supplier": class_ids[r.destino_id],
                 **({"name": r.etiqueta} if r.etiqueta else {}),
@@ -290,15 +284,15 @@ def build_xmi(diagram) -> bytes:
 
         assoc_el = ET.SubElement(package_el, "packagedElement", {
             f"{{{XMI_NS}}}type": "uml:Association",
-            f"{{{XMI_NS}}}id": f"AS_{_slug_id(r.id)}",
+            f"{{{XMI_NS}}}id": f"AS_{r.id}",
             **({"name": r.etiqueta} if r.etiqueta else {}),
         })
-        ET.SubElement(assoc_el, "memberEnd", {f"{{{XMI_NS}}}idref": f"E1_{_slug_id(r.id)}"})
-        ET.SubElement(assoc_el, "memberEnd", {f"{{{XMI_NS}}}idref": f"E2_{_slug_id(r.id)}"})
+        ET.SubElement(assoc_el, "memberEnd", {f"{{{XMI_NS}}}idref": f"E1_{r.id}"})
+        ET.SubElement(assoc_el, "memberEnd", {f"{{{XMI_NS}}}idref": f"E2_{r.id}"})
 
         end1 = ET.SubElement(assoc_el, "ownedEnd", {
             f"{{{XMI_NS}}}type": "uml:Property",
-            f"{{{XMI_NS}}}id": f"E1_{_slug_id(r.id)}",
+            f"{{{XMI_NS}}}id": f"E1_{r.id}",
             "type": class_ids[r.origen_id],
             "aggregation": "none",
         })
@@ -307,7 +301,7 @@ def build_xmi(diagram) -> bytes:
 
         end2 = ET.SubElement(assoc_el, "ownedEnd", {
             f"{{{XMI_NS}}}type": "uml:Property",
-            f"{{{XMI_NS}}}id": f"E2_{_slug_id(r.id)}",
+            f"{{{XMI_NS}}}id": f"E2_{r.id}",
             "type": class_ids[r.destino_id],
             "aggregation": _AGGREGATION_BY_TYPE.get(r.tipo, "none"),
         })
@@ -354,8 +348,7 @@ def build_xmi(diagram) -> bytes:
         })
 
     ET.indent(xmi_root, space="  ")
-    body = ET.tostring(xmi_root, encoding="windows-1252", xml_declaration=False)
-    return b'<?xml version="1.0" encoding="windows-1252"?>\n' + body
+    return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(xmi_root, encoding="utf-8")
 
 
 
