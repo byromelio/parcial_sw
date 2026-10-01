@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.core.security import get_current_user
-from app.models.uml import Relacion
+from app.models.uml import Clase, Relacion
 from app.models.user import User
 from app.schemas.xmi import XmiImportSummary
 from app.services.ai_tools import DiagramToolExecutor, ToolError
@@ -146,6 +146,55 @@ async def import_xmi(
         except ToolError as e:
             summary.relations_skipped += 1
             summary.warnings.append(str(e))
+
+    # --- Reposicionar clases de asociacion recien creadas ---
+    # La grilla generica de arriba no sabe nada de relaciones todavia (las
+    # clases se crean antes), asi que una clase intermedia (es_clase_asociacion)
+    # termina en cualquier celda, lejos de las 2 clases que conecta -- las
+    # 2 lineas punteadas de la geometria en T (ver ConnectionLayer.jsx)
+    # terminan cruzando medio diagrama. Una vez que las relaciones ya
+    # existen, se puede detectar que clase es intermedia de que par y
+    # moverla al punto medio real entre esas dos, en celdas de grilla.
+    nombres_creados = {n.lower() for n in summary.classes_created}
+    if nombres_creados:
+        por_id = {c.id: c for c in db.query(Clase).filter(Clase.diagram_id == diagram.id).all()}
+
+        flagged = [
+            r for r in db.query(Relacion)
+            .filter(Relacion.diagram_id == diagram.id)
+            .filter(Relacion.es_clase_asociacion.is_(True))
+            .all()
+        ]
+        by_intermedia: dict[str, list] = {}
+        for r in flagged:
+            for lado in (r.origen_id, r.destino_id):
+                by_intermedia.setdefault(lado, []).append(r)
+
+        for clase_id, rels in by_intermedia.items():
+            if len(rels) != 2:
+                continue
+            r1, r2 = rels
+            if r1.id == r2.id:
+                continue
+            other1 = r1.destino_id if r1.origen_id == clase_id else r1.origen_id
+            other2 = r2.destino_id if r2.origen_id == clase_id else r2.origen_id
+            if not other1 or not other2 or other1 == other2 or other1 == clase_id or other2 == clase_id:
+                continue
+            intermedia = por_id.get(clase_id)
+            clase_a = por_id.get(other1)
+            clase_b = por_id.get(other2)
+            if not intermedia or not clase_a or not clase_b:
+                continue
+            if intermedia.nombre.lower() not in nombres_creados:
+                continue  # solo reposicionar clases que este import creo, no mover las que ya estaban
+            try:
+                executor.move_class(
+                    class_name=intermedia.nombre,
+                    x_grid=round((clase_a.x_grid + clase_b.x_grid) / 2),
+                    y_grid=round((clase_a.y_grid + clase_b.y_grid) / 2) + 4,
+                )
+            except ToolError as e:
+                logger.info(f"[XMI import] no se pudo reposicionar '{intermedia.nombre}': {e}")
 
     logger.info(
         f"[XMI import] diagram_id={diagram_id} "
