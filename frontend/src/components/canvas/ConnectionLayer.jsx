@@ -164,18 +164,24 @@ export default function ConnectionLayer({
     // punteada que sale del punto medio de esa asociacion hacia la clase
     // intermedia -- no como dos lineas punteadas en serie (A--interm--B),
     // que es como las guarda la base de datos (ver convertToAssociationClass
-    // en Diagram.jsx: siempre son 2 relaciones separadas, nunca 3). Acá se
-    // detecta ese patron (una clase que participa en exactamente 2
-    // relaciones marcadas esClaseAsociacion, cada una hacia una clase
-    // distinta) y se reconstruye la geometria en T a partir de esas 2
-    // relaciones, sin tocar como se guardan.
+    // en Diagram.jsx: siempre son 2 relaciones separadas, nunca 3).
+    //
+    // Detectar la intermedia NO alcanza con "participa en exactamente 2
+    // relaciones marcadas": una clase que participa de DOS clases de
+    // asociacion distintas (ej. "Venta" conectada a la vez con
+    // Detalle_Venta y con Detalle_Devolucion) tambien junta 2 relaciones
+    // marcadas, una por cada par, sin ser intermedia de ninguna. El
+    // criterio real es que la intermedia NO TIENE NINGUNA otra relacion:
+    // sus UNICAS relaciones en todo el diagrama son esas 2 marcadas.
     const assocFlagged = normalized.filter((r) => r.esClaseAsociacion);
+    const allByClass = new Map(); // classId -> cantidad total de relaciones (cualquier tipo)
+    for (const r of normalized) {
+      for (const side of [r.fromId, r.toId]) {
+        allByClass.set(side, (allByClass.get(side) || 0) + 1);
+      }
+    }
     const byIntermedia = new Map(); // classId candidato a intermedia -> [relacion,...]
     for (const r of assocFlagged) {
-      // La clase intermedia es la que estas relaciones comparten: si A
-      // tiene 2 relaciones marcadas y ambas la tienen como fromId o toId,
-      // A es la intermedia (el patron real que arma convertToAssociationClass
-      // es origen -> intermedia -> destino).
       for (const side of [r.fromId, r.toId]) {
         if (!byIntermedia.has(side)) byIntermedia.set(side, []);
         byIntermedia.get(side).push(r);
@@ -186,6 +192,10 @@ export default function ConnectionLayer({
     const tSegments = [];
     for (const [classId, rels] of byIntermedia) {
       if (rels.length !== 2) continue;
+      // Si esta clase tiene mas relaciones en total que las 2 marcadas que
+      // junto aca, no es la intermedia -- es una de las clases "reales"
+      // que participa en multiples clases de asociacion.
+      if ((allByClass.get(classId) || 0) !== 2) continue;
       const [r1, r2] = rels;
       if (r1.id === r2.id) continue;
       // classId tiene que ser el extremo COMUN de ambas relaciones, y las
