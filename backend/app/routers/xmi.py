@@ -140,6 +140,7 @@ async def import_xmi(
                 label=ir.label,
                 src_multiplicity=_mult_str(ir.src_mult_min, ir.src_mult_max),
                 dst_multiplicity=_mult_str(ir.dst_mult_min, ir.dst_mult_max),
+                es_clase_asociacion=ir.es_clase_asociacion,
             )
             summary.relations_created += 1
         except ToolError as e:

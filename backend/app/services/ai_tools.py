@@ -238,6 +238,7 @@ class DiagramToolExecutor:
         label: Optional[str] = None,
         src_multiplicity: Optional[str] = None,
         dst_multiplicity: Optional[str] = None,
+        es_clase_asociacion: bool = False,
     ) -> dict:
         src = self._find_class(from_class)
         dst = self._find_class(to_class)
@@ -260,6 +261,7 @@ class DiagramToolExecutor:
             etiqueta=label,
             mult_origen_min=src_min, mult_origen_max=src_max,
             mult_destino_min=dst_min, mult_destino_max=dst_max,
+            es_clase_asociacion=es_clase_asociacion,
         )
         self.db.add(r)
         self.db.commit()

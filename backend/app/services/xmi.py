@@ -232,6 +232,7 @@ class ImportedRelation:
     src_mult_max: int | None = 1
     dst_mult_min: int = 1
     dst_mult_max: int | None = 1
+    es_clase_asociacion: bool = False
 
 
 @dataclass
@@ -348,8 +349,15 @@ def parse_xmi(xml_bytes: bytes) -> ImportResult:
     name_by_id: dict[str, str] = {}
 
     # --- Clases + atributos ---
+    # EA representa una clase de asociacion (UML 2.5: la relacion
+    # muchos-a-muchos vista como clase propia) con xmi:type="uml:AssociationClass"
+    # en vez de "uml:Class" -- verificado contra un archivo real exportado
+    # desde EA con dos clases de asociacion genuinas. Sin este chequeo
+    # extra, esas clases se descartaban por completo al importar (no solo
+    # perdian el estilo de linea punteada: directamente desaparecian del
+    # diagrama resultante).
     for el in tree.iter():
-        if _xmi_type(el) != "uml:Class":
+        if _xmi_type(el) not in ("uml:Class", "uml:AssociationClass"):
             continue
         xid = _xmi_id(el)
         name = el.get("name")
@@ -424,6 +432,32 @@ def parse_xmi(xml_bytes: bytes) -> ImportResult:
                 src_mult_min=1, src_mult_max=1, dst_mult_min=1, dst_mult_max=1,
             ))
 
+    # Marca que uml:Association tiene una clase de asociacion vinculada:
+    # el vinculo NO vive en el modelo UML (uml:Association no referencia a
+    # la clase en absoluto), sino en xmi:Extension/connectors/connector,
+    # como el atributo extendedProperties[@associationclass] -- verificado
+    # contra un archivo real de EA. Un xmi:Association sin conector
+    # correspondiente ahi (o sin ese atributo) es una asociacion comun.
+    association_class_name: dict[str, str] = {}
+    for el in tree.iter():
+        if _local(el.tag) != "connector":
+            continue
+        for child in el:
+            if _local(child.tag) != "extendedProperties":
+                continue
+            assoc_class_id = child.get("associationclass")
+            if not assoc_class_id:
+                continue
+            conn_id = _xmi_id(el)
+            if not conn_id:
+                for key, val in el.attrib.items():
+                    if _local(key) == "idref":
+                        conn_id = val
+                        break
+            class_name = name_by_id.get(assoc_class_id)
+            if conn_id and class_name:
+                association_class_name[conn_id] = class_name
+
     # --- Asociaciones (incluye agregacion/composicion via aggregation="shared"/"composite") ---
     for el in tree.iter():
         if _xmi_type(el) != "uml:Association":
@@ -478,6 +512,28 @@ def parse_xmi(xml_bytes: bytes) -> ImportResult:
         rel_type = _TYPE_BY_AGGREGATION.get(agg, RelType.ASSOCIATION).value
         src_min, src_max = _end_mult(ends[0])
         dst_min, dst_max = _end_mult(ends[1])
+
+        assoc_class_name = association_class_name.get(_xmi_id(el))
+        if assoc_class_name and rel_type == "ASSOCIATION":
+            # El modelo de este proyecto no representa la clase de
+            # asociacion como un flag sobre una unica asociacion directa
+            # entre las dos clases originales (asi es como EA la guarda
+            # en el XMI): en cambio, necesita DOS relaciones punteadas,
+            # cada una de una clase original hacia la clase intermedia.
+            # Se sintetizan aca, en vez de importar la asociacion directa
+            # que trae el archivo, para que el resultado coincida con lo
+            # que produce convertToAssociationClass() en el frontend.
+            result.relations.append(ImportedRelation(
+                from_name=src_name, to_name=assoc_class_name, type="ASSOCIATION",
+                src_mult_min=1, src_mult_max=1, dst_mult_min=0, dst_mult_max=None,
+                es_clase_asociacion=True,
+            ))
+            result.relations.append(ImportedRelation(
+                from_name=assoc_class_name, to_name=dst_name, type="ASSOCIATION",
+                src_mult_min=0, src_mult_max=None, dst_mult_min=1, dst_mult_max=1,
+                es_clase_asociacion=True,
+            ))
+            continue
 
         result.relations.append(ImportedRelation(
             from_name=src_name, to_name=dst_name, type=rel_type,
