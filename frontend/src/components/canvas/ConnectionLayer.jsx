@@ -6,7 +6,7 @@
 // cada ClassCard hasta que se suelta el mouse.
 
 import { useEffect, useMemo, useState } from "react";
-import { getAnchorForClassSide, inferClosestSide } from "./utils/geometry";
+import { getAnchorForClassSide, getClassRectById, inferClosestSide } from "./utils/geometry";
 
 const DEFAULT_COLOR = "#7cf7ff";
 const SELECTED_COLOR = "#4f7cff"; // var(--accent)
@@ -157,16 +157,108 @@ export default function ConnectionLayer({
   };
 
   const relationSegments = useMemo(() => {
-    const segs = [];
-    for (const rr of relations) {
-      const r = norm(rr);
-      if (!r.fromId || !r.toId) continue;
+    const normalized = relations.map(norm).filter((r) => r.fromId && r.toId);
 
+    // UML 2.5: una clase de asociacion se dibuja con la asociacion normal
+    // (solida) entre las dos clases originales, y una tercera linea
+    // punteada que sale del punto medio de esa asociacion hacia la clase
+    // intermedia -- no como dos lineas punteadas en serie (A--interm--B),
+    // que es como las guarda la base de datos (ver convertToAssociationClass
+    // en Diagram.jsx: siempre son 2 relaciones separadas, nunca 3). Acá se
+    // detecta ese patron (una clase que participa en exactamente 2
+    // relaciones marcadas esClaseAsociacion, cada una hacia una clase
+    // distinta) y se reconstruye la geometria en T a partir de esas 2
+    // relaciones, sin tocar como se guardan.
+    const assocFlagged = normalized.filter((r) => r.esClaseAsociacion);
+    const byIntermedia = new Map(); // classId candidato a intermedia -> [relacion,...]
+    for (const r of assocFlagged) {
+      // La clase intermedia es la que estas relaciones comparten: si A
+      // tiene 2 relaciones marcadas y ambas la tienen como fromId o toId,
+      // A es la intermedia (el patron real que arma convertToAssociationClass
+      // es origen -> intermedia -> destino).
+      for (const side of [r.fromId, r.toId]) {
+        if (!byIntermedia.has(side)) byIntermedia.set(side, []);
+        byIntermedia.get(side).push(r);
+      }
+    }
+
+    const syntheticIds = new Set(); // relaciones ya absorbidas en un patron de T, no dibujar sueltas
+    const tSegments = [];
+    for (const [classId, rels] of byIntermedia) {
+      if (rels.length !== 2) continue;
+      const [r1, r2] = rels;
+      if (r1.id === r2.id) continue;
+      // classId tiene que ser el extremo COMUN de ambas relaciones, y las
+      // otras dos puntas (las clases "reales") tienen que ser distintas
+      // entre si -- si no, no es el patron en T (ej. dos relaciones que
+      // casualmente comparten esClaseAsociacion pero no la misma intermedia).
+      const other1 = r1.fromId === classId ? r1.toId : r1.fromId;
+      const other2 = r2.fromId === classId ? r2.toId : r2.fromId;
+      if (!other1 || !other2 || other1 === other2 || other1 === classId || other2 === classId) continue;
+      if (syntheticIds.has(r1.id) || syntheticIds.has(r2.id)) continue;
+
+      // Centro aproximado de cada clase (su rect en pantalla), para elegir
+      // de que lado sale cada punta de la linea solida A-B segun hacia
+      // donde esta la otra clase realmente -- fijar "right"/"left" se veia
+      // mal cuando las clases quedan una arriba de la otra en vez de lado
+      // a lado.
+      const rectA = getClassRectById(other1);
+      const rectB = getClassRectById(other2);
+      if (!rectA || !rectB) continue;
+      const centerA = { x: (rectA.left + rectA.right) / 2, y: (rectA.top + rectA.bottom) / 2 };
+      const centerB = { x: (rectB.left + rectB.right) / 2, y: (rectB.top + rectB.bottom) / 2 };
+
+      const aAnchor = getAnchorForClassSide(other1, inferClosestSide(other1, centerB));
+      const bAnchor = getAnchorForClassSide(other2, inferClosestSide(other2, centerA));
+      if (!aAnchor || !bAnchor) continue;
+
+      const mid = { x: (aAnchor.x + bAnchor.x) / 2, y: (aAnchor.y + bAnchor.y) / 2 };
+      const midAnchor = getAnchorForClassSide(classId, inferClosestSide(classId, mid));
+      if (!midAnchor) continue;
+
+      syntheticIds.add(r1.id);
+      syntheticIds.add(r2.id);
+
+      // Segmento solido A-B: toma label/multiplicidad combinados de las
+      // dos relaciones originales (son las mismas que el usuario cargo al
+      // convertir la relacion a clase de asociacion).
+      tSegments.push({
+        ...r1,
+        id: `${r1.id}+${r2.id}`,
+        fromId: other1,
+        toId: other2,
+        a: aAnchor,
+        b: bAnchor,
+        srcA: "right",
+        dstA: "left",
+        esClaseAsociacion: false,
+        isAssociationClassSolid: true,
+        recursive: false,
+      });
+      // Tercer brazo: punteado, sin flecha, del punto medio a la intermedia.
+      tSegments.push({
+        id: `${r1.id}+${r2.id}--link`,
+        fromId: classId,
+        toId: classId,
+        type: "ASSOCIATION",
+        a: mid,
+        b: midAnchor,
+        srcA: "right",
+        dstA: "right",
+        srcMin: null, srcMax: null, dstMin: null, dstMax: null,
+        label: null,
+        esClaseAsociacion: true,
+        isAssociationClassLink: true,
+        recursive: false,
+      });
+    }
+
+    const segs = [...tSegments];
+    for (const r of normalized) {
+      if (syntheticIds.has(r.id)) continue;
       const a = getAnchorForClassSide(r.fromId, r.srcA);
       const b = getAnchorForClassSide(r.toId, r.dstA);
-
       if (!a || !b) continue;
-
       segs.push({ ...r, a, b, recursive: r.fromId === r.toId });
     }
     return segs;
@@ -308,7 +400,7 @@ export default function ConnectionLayer({
         // subtipo es exactamente uno del supertipo, y una dependencia es
         // un uso puntual, no una cardinalidad) -- mismo criterio que ya
         // aplica RelationInspector para ocultar esos campos en el panel.
-        const sinMultiplicidad = seg.type === "INHERITANCE" || seg.type === "DEPENDENCY";
+        const sinMultiplicidad = seg.type === "INHERITANCE" || seg.type === "DEPENDENCY" || seg.isAssociationClassLink;
 
         const labels = (
           <>
@@ -330,10 +422,19 @@ export default function ConnectionLayer({
           </>
         );
 
+        // Los segmentos sinteticos de la geometria en T (la linea solida
+        // A-B reconstruida y su tercer brazo punteado) no son una fila
+        // real en la base de datos -- su "id" es compuesto
+        // ("rel1+rel2"/"rel1+rel2--link") y no existe como relacion
+        // propia, asi que no se puede seleccionar/editar/arrastrar como
+        // si fuera una. El click pasa de largo hasta lo que esta debajo.
         const hitProps = {
           stroke: "transparent",
           strokeWidth: Math.max(16, strokeWidth + 10),
-          style: { pointerEvents: "auto", cursor: onSelectRelation ? "pointer" : "default" },
+          style: {
+            pointerEvents: seg.isAssociationClassLink || seg.isAssociationClassSolid ? "none" : "auto",
+            cursor: onSelectRelation ? "pointer" : "default",
+          },
           onClick: () => onSelectRelation?.(seg.id),
         };
 
@@ -343,7 +444,7 @@ export default function ConnectionLayer({
         // ver getAnchorsForRelation). pointerEvents "auto" porque el resto
         // del SVG lo tiene en "none" para dejar pasar los clicks al Sheet.
         const endpointHandles =
-          isSelected && !seg.recursive && onUpdateRelation ? (
+          isSelected && !seg.recursive && !seg.isAssociationClassLink && !seg.isAssociationClassSolid && onUpdateRelation ? (
             <>
               <circle
                 cx={a.x} cy={a.y} r={7}
