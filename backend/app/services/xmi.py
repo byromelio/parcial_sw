@@ -459,8 +459,15 @@ def parse_xmi(xml_bytes: bytes) -> ImportResult:
                 association_class_name[conn_id] = class_name
 
     # --- Asociaciones (incluye agregacion/composicion via aggregation="shared"/"composite") ---
+    # uml:AssociationClass se procesa en el MISMO bucle que uml:Association:
+    # a diferencia de lo que sugeria la extension de EA (el atributo
+    # associationclass en xmi:Extension/connectors), en este archivo real
+    # la AssociationClass trae sus propios ownedEnd apuntando directo a las
+    # 2 clases "reales" -- no hace falta un uml:Association aparte ni el
+    # connector para saber con que esta conectada.
     for el in tree.iter():
-        if _xmi_type(el) != "uml:Association":
+        el_type = _xmi_type(el)
+        if el_type not in ("uml:Association", "uml:AssociationClass"):
             continue
 
         ends = [c for c in el if _local(c.tag) == "ownedEnd"]
@@ -513,7 +520,14 @@ def parse_xmi(xml_bytes: bytes) -> ImportResult:
         src_min, src_max = _end_mult(ends[0])
         dst_min, dst_max = _end_mult(ends[1])
 
-        assoc_class_name = association_class_name.get(_xmi_id(el))
+        # Nombre de la clase intermedia: para una AssociationClass real
+        # (verificado contra un archivo de EA real), es su propio "name",
+        # y sus ownedEnd apuntan directo a las 2 clases con las que se
+        # conecta -- no hace falta ningun otro vinculo externo. El
+        # association_class_name (via xmi:Extension/connectors) queda
+        # como fallback para el caso en que el conector sea la unica
+        # pista disponible (sin verificar contra un archivo real asi).
+        assoc_class_name = el.get("name") if el_type == "uml:AssociationClass" else association_class_name.get(_xmi_id(el))
         if assoc_class_name and rel_type == "ASSOCIATION":
             # El modelo de este proyecto no representa la clase de
             # asociacion como un flag sobre una unica asociacion directa
